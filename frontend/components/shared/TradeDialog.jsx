@@ -1,78 +1,100 @@
 // components/shared/TradeDialog.jsx
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogClose, // 用於點擊取消按鈕關閉
-  // DialogDescription, // 如果需要描述
+  DialogClose,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"; // 用於切換買入/賣出
-import { X as CloseIcon, TrendingUp, TrendingDown } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"; // 引入 Select 組件
-import Link from "next/link";
+} from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  X as CloseIcon,
+  Search,
+  TrendingUp,
+  TrendingDown,
+  Loader2 as Spinner,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { debounce } from "lodash";
 
 export default function TradeDialog({
-  isOpen, // 控制 Dialog 是否開啟
-  onClose, // 關閉 Dialog 的回呼函數
-  stockSymbol, // 股票代號
-  stockName, // 股票名稱
-  currentPrice, // 當前股價 (數字類型)
-  priceChange, // 價格變動 (數字)
-  percentChange, // 百分比變動 (數字)
-  isUp, // 是否上漲 (布林值)
-  initialAction = "BUY", // 初始是買入還是賣出
-  portfolioId, // 如果需要指定交易到哪個投資組合
-  onPortfolioSelect, // << (可選) 如果彈窗內部選擇組合，則需要回呼
+  isOpen,
+  onClose,
+  initialSelectedStock, // 可選的，用於預填股票
+  portfolioId, // 交易到哪個投資組合 (現在是必須的)
+  initialAction = "BUY",
+  onTradeSubmitSuccess, // 交易成功後的回呼
 }) {
-  const [actionType, setActionType] = useState(initialAction); // 'BUY' or 'SELL'
-  const [quantity, setQuantity] = useState(10); // 預設數量
-  const [priceType, setPriceType] = useState("market"); // 'market' or 'limit' (市價或限價)
-  const [limitPrice, setLimitPrice] = useState(""); // 限價價格
-  const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
-  const [portfolios, setPortfolios] = useState([]); // 儲存用戶的投資組合列表
+  const [actionType, setActionType] = useState(initialAction);
+  const [quantity, setQuantity] = useState(10);
+
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isLoadingSearch, setIsLoadingSearch] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  const [portfolios, setPortfolios] = useState([]);
   const [selectedPortfolioId, setSelectedPortfolioId] = useState(
     portfolioId || ""
-  ); // 用戶選擇的 portfolioId
+  ); // 優先使用傳入的 portfolioId
   const [isFetchingPortfolios, setIsFetchingPortfolios] = useState(false);
 
-  // 當 initialAction 改變時，更新 actionType
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+
   useEffect(() => {
     setActionType(initialAction);
   }, [initialAction]);
 
-  // 當彈窗打開時，獲取用戶的投資組合列表
   useEffect(() => {
     if (isOpen) {
+      // 重置或設置股票信息
+      if (initialSelectedStock) {
+        setSelectedStock(initialSelectedStock);
+        setSearchQuery(
+          `${initialSelectedStock.symbol} - ${initialSelectedStock.name}`
+        );
+        setShowSearchResults(false);
+        setSearchResults([]);
+      } else {
+        setSelectedStock(null);
+        setSearchQuery("");
+        setSearchResults([]);
+        setShowSearchResults(false);
+      }
+
+      // 獲取投資組合列表
       const fetchPortfolios = async () => {
         setIsFetchingPortfolios(true);
         try {
           // TODO: 呼叫 API 獲取用戶的投資組合列表
-          // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/portfolios`
-          // // , { headers: { 'Authorization': `Bearer ${token}` } }
-          // );
+          // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/portfolios`);
           // if (!response.ok) throw new Error('Failed to fetch portfolios');
           // const data = await response.json();
           // setPortfolios(data);
-          // if (data.length > 0 && !portfolioId) { // 如果外部沒有指定 portfolioId，預設選中第一個
-          //   setSelectedPortfolioId(data[0].portfolio_id.toString());
-          // } else if (portfolioId) {
+          // if (portfolioId) { // 如果外部傳入了 portfolioId，則設定為預設
           //   setSelectedPortfolioId(portfolioId.toString());
+          // } else if (data.length > 0) { // 否則，如果列表不為空，選第一個
+          //   setSelectedPortfolioId(data[0].portfolio_id.toString());
+          // } else {
+          //   setSelectedPortfolioId(""); // 清空選擇
           // }
 
           // 模擬數據
@@ -83,10 +105,12 @@ export default function TradeDialog({
             { portfolio_id: 3, portfolio_name: "長期持有" },
           ];
           setPortfolios(mockPortfolios);
-          if (mockPortfolios.length > 0 && !portfolioId) {
-            setSelectedPortfolioId(mockPortfolios[0].portfolio_id.toString());
-          } else if (portfolioId) {
+          if (portfolioId) {
             setSelectedPortfolioId(portfolioId.toString());
+          } else if (mockPortfolios.length > 0) {
+            setSelectedPortfolioId(mockPortfolios[0].portfolio_id.toString());
+          } else {
+            setSelectedPortfolioId("");
           }
         } catch (err) {
           console.error("Error fetching portfolios:", err);
@@ -101,14 +125,10 @@ export default function TradeDialog({
       };
       fetchPortfolios();
     }
-  }, [isOpen, portfolioId, toast]); // 當 isOpen, portfolioId 變化時重新獲取
+  }, [isOpen, initialSelectedStock, portfolioId, toast]);
 
-  const effectivePrice = useMemo(() => {
-    if (priceType === "limit" && limitPrice && !isNaN(parseFloat(limitPrice))) {
-      return parseFloat(limitPrice);
-    }
-    return currentPrice || 0; // 如果是市價或限價未輸入，則使用當前市價
-  }, [priceType, limitPrice, currentPrice]);
+  const currentPriceForCalc = selectedStock?.current_price || 0;
+  const effectivePrice = currentPriceForCalc; // 簡化為市價
 
   const totalValue = useMemo(() => {
     const numQuantity = parseInt(quantity, 10);
@@ -120,40 +140,122 @@ export default function TradeDialog({
 
   const handleQuantityChange = (e) => {
     const value = e.target.value;
-    // 只允許數字
     if (/^\d*$/.test(value)) {
       setQuantity(value === "" ? "" : parseInt(value, 10));
     }
   };
 
-  const handleLimitPriceChange = (e) => {
-    const value = e.target.value;
-    // 允許數字和小數點
-    if (/^\d*\.?\d*$/.test(value)) {
-      setLimitPrice(value);
+  const debouncedSearch = useCallback(
+    debounce(async (query) => {
+      if (!query || query.length < 1) {
+        setSearchResults([]);
+        setShowSearchResults(false);
+        setIsLoadingSearch(false);
+        return;
+      }
+      if (
+        selectedStock &&
+        `${selectedStock.symbol} - ${selectedStock.name}` === query
+      ) {
+        // 如果搜尋框內容與已選股票一致，則不重新搜尋
+        setShowSearchResults(false);
+        setIsLoadingSearch(false);
+        return;
+      }
+
+      setIsLoadingSearch(true);
+      setShowSearchResults(true);
+      try {
+        // TODO: API 呼叫，需要返回 current_price, is_up, change_amount, change_percent
+        // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stocks/search?q=${encodeURIComponent(query)}&include_price=true`);
+        // const data = await response.json();
+        // setSearchResults(data);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const mockResults = [
+          {
+            stock_id: "AAPL_stock_id",
+            symbol: "AAPL",
+            name: "Apple Inc.",
+            current_price: 170.34,
+            is_up: true,
+            change_amount: 2.1,
+            change_percent: 1.25,
+          },
+          {
+            stock_id: "TSLA_stock_id",
+            symbol: "TSLA",
+            name: "Tesla, Inc.",
+            current_price: 750.0,
+            is_up: false,
+            change_amount: -5.0,
+            change_percent: -0.66,
+          },
+          {
+            stock_id: "MSFT_stock_id",
+            symbol: "MSFT",
+            name: "Microsoft Corp.",
+            current_price: 290.75,
+            is_up: true,
+            change_amount: 3.5,
+            change_percent: 1.22,
+          },
+        ].filter(
+          (stock) =>
+            stock.symbol.toLowerCase().includes(query.toLowerCase()) ||
+            stock.name.toLowerCase().includes(query.toLowerCase())
+        );
+        setSearchResults(mockResults);
+      } catch (error) {
+        setSearchResults([]);
+        toast({
+          variant: "destructive",
+          title: "搜尋錯誤",
+          description: "搜尋股票時發生問題。",
+        });
+      } finally {
+        setIsLoadingSearch(false);
+      }
+    }, 300),
+    [toast, selectedStock] // 加入 selectedStock 到依賴
+  );
+
+  useEffect(() => {
+    // 如果用戶手動清空搜尋框，或修改了已選中股票的搜尋框內容，則清空已選中股票
+    if (
+      searchQuery === "" ||
+      (selectedStock &&
+        `${selectedStock.symbol} - ${selectedStock.name}` !== searchQuery)
+    ) {
+      if (selectedStock) setSelectedStock(null); // 只有在之前有選中股票時才清空
     }
+    debouncedSearch(searchQuery);
+    return () => debouncedSearch.cancel();
+  }, [searchQuery, selectedStock, debouncedSearch]);
+
+  const handleSelectStock = (stock) => {
+    setSelectedStock(stock);
+    setSearchQuery(`${stock.symbol} - ${stock.name}`);
+    setShowSearchResults(false);
+    setSearchResults([]);
   };
 
   const handleSubmitTrade = async () => {
     setIsLoading(true);
-    // 基本驗證
-    if (parseInt(quantity, 10) <= 0) {
+    if (!selectedStock) {
       toast({
         variant: "destructive",
         title: "錯誤",
-        description: "數量必須大於 0。",
+        description: "請選擇一支股票。",
       });
       setIsLoading(false);
       return;
     }
-    if (
-      priceType === "limit" &&
-      (limitPrice === "" || parseFloat(limitPrice) <= 0)
-    ) {
+    const numQuantity = parseInt(quantity, 10);
+    if (isNaN(numQuantity) || numQuantity <= 0) {
       toast({
         variant: "destructive",
         title: "錯誤",
-        description: "限價模式下，價格必須大於 0。",
+        description: "數量必須是正整數。",
       });
       setIsLoading(false);
       return;
@@ -168,68 +270,61 @@ export default function TradeDialog({
       return;
     }
 
-    console.log("Submitting trade:", {
-      stockSymbol,
-      actionType,
-      quantity: parseInt(quantity, 10),
-      priceType,
-      price: effectivePrice,
-      totalValue,
-      portfolioId: parseInt(selectedPortfolioId, 10),
-    });
-
     // TODO: 呼叫後端 API 記錄模擬交易
-    // try {
-    //   const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/transactions`, {
-    //     method: 'POST',
-    //     headers: {
-    //       'Content-Type': 'application/json',
-    //       // 'Authorization': `Bearer ${your_auth_token}`
-    //     },
-    //     body: JSON.stringify({
-    //       stock_symbol: stockSymbol,
-    //       transaction_type: actionType,
-    //       quantity: parseInt(quantity, 10),
-    //       price_per_share: effectivePrice,
-    //       portfolio_id: parseInt(selectedPortfolioId, 10),
-    //       // commission: 0, // 手續費 (可選)
-    //       // transaction_date: new Date().toISOString(), // 交易時間
-    //     }),
-    //   });
-    //   if (!response.ok) {
-    //     const errorData = await response.json();
-    //     throw new Error(errorData.detail || "交易失敗，請稍後再試。");
-    //   }
-    //   toast({ title: "交易成功", description: `${actionType === 'BUY' ? '買入' : '賣出'} ${quantity} 股 ${stockSymbol} 成功。` });
-    //   onClose(); // 成功後關閉彈窗
-    // } catch (err) {
-    //   console.error("Trade submission error:", err);
-    //   toast({ variant: "destructive", title: "交易失敗", description: err.message });
-    // } finally {
-    //   setIsLoading(false);
-    // }
-
-    // 模擬 API 呼叫成功
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    toast({
-      title: "模擬交易成功",
-      description: `${
-        actionType === "BUY" ? "買入" : "賣出"
-      } ${quantity} 股 ${stockSymbol} 成功。`,
+    console.log("Submitting trade:", {
+      stock_id: selectedStock.stock_id,
+      portfolio_id: parseInt(selectedPortfolioId, 10),
+      transaction_type: actionType,
+      quantity: numQuantity,
+      price_per_share: effectivePrice,
     });
-    setIsLoading(false);
-    onClose(); // 成功後關閉彈窗
+    try {
+      // const response = await fetch(...)
+      // if (!response.ok) throw new Error(...)
+      // const result = await response.json();
+
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+      toast({
+        title: "模擬交易成功",
+        description: `${
+          actionType === "BUY" ? "買入" : "賣出"
+        } ${numQuantity} 股 ${selectedStock.symbol} 成功。`,
+      });
+
+      if (onTradeSubmitSuccess) {
+        onTradeSubmitSuccess(); // 這個回呼應該處理關閉彈窗和刷新數據
+      } else {
+        onClose(); // 如果沒有回呼，自己關閉
+      }
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "交易失敗",
+        description: err.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  if (!isOpen) return null;
+  const handleDialogClose = () => {
+    setActionType(initialAction); // 回到初始動作
+    setQuantity(10);
+    setSelectedStock(null);
+    setSearchQuery("");
+    setSearchResults([]);
+    setShowSearchResults(false);
+    // setSelectedPortfolioId(portfolioId || ""); // 根據是否希望保留上次選擇或用 prop 重置
+    // setPortfolios([]); // 通常不需要重置 portfolio 列表，除非它很動態
+    setIsLoading(false);
+    setIsLoadingSearch(false);
+    onClose();
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      {" "}
-      {/* onOpenChange 會在點擊外部或按 ESC 時觸發 */}
-      <DialogContent className="sm:max-w-[450px] bg-slate-800 border-slate-700 text-slate-200 p-0 overflow-hidden">
-        {/* 自訂關閉按鈕 */}
-        {/* <DialogClose asChild className="absolute right-3 top-3">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleDialogClose()}>
+      <DialogContent className="sm:max-w-md bg-slate-800 border-slate-700 text-slate-200 p-0 overflow-hidden">
+        {/* <DialogClose asChild className="absolute right-3 top-3 z-10">
           <Button
             variant="ghost"
             size="icon"
@@ -241,170 +336,229 @@ export default function TradeDialog({
 
         <DialogHeader className="bg-slate-800 px-6 pt-6 pb-4 border-b border-slate-700">
           <DialogTitle className="text-xl font-semibold text-slate-50">
-            買入 / 賣出 {stockSymbol}
+            新增交易
           </DialogTitle>
-          <div className="text-sm text-slate-400">{stockName}</div>
-          <div>
-            <span
-              className={`text-2xl font-bold ${
-                isUp ? "text-green-400" : "text-red-400"
-              }`}
-            >
-              ${(currentPrice || 0).toFixed(2)}
-            </span>
-            <span
-              className={`ml-2 text-sm font-medium ${
-                isUp ? "text-green-400" : "text-red-400"
-              }`}
-            >
-              {isUp ? "+" : ""}
-              {(priceChange || 0).toFixed(2)} ({isUp ? "+" : ""}
-              {(percentChange || 0).toFixed(2)}%)
-            </span>
-          </div>
+          {selectedStock ? (
+            <>
+              <div className="text-sm text-slate-400">
+                {selectedStock.name} ({selectedStock.symbol})
+              </div>
+              <div>
+                <span
+                  className={`text-2xl font-bold ${
+                    selectedStock.is_up ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  ${(selectedStock.current_price || 0).toFixed(2)}
+                </span>
+                <span
+                  className={`ml-2 text-sm font-medium ${
+                    selectedStock.is_up ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {selectedStock.is_up ? (
+                    <TrendingUp className="inline h-4 w-4" />
+                  ) : (
+                    <TrendingDown className="inline h-4 w-4" />
+                  )}
+                  {selectedStock.is_up ? "+" : ""}
+                  {(selectedStock.change_amount || 0).toFixed(2)} (
+                  {selectedStock.is_up ? "+" : ""}
+                  {(selectedStock.change_percent || 0).toFixed(2)}%)
+                </span>
+              </div>
+            </>
+          ) : (
+            <DialogDescription className="text-slate-400">
+              搜尋並選擇股票以進行交易。
+            </DialogDescription>
+          )}
         </DialogHeader>
 
-        <div className="p-6 space-y-6">
-          <Tabs
-            value={actionType}
-            onValueChange={setActionType}
-            className="w-full"
-          >
-            <TabsList className="grid w-full grid-cols-2 bg-slate-700 p-1 h-auto">
-              <TabsTrigger
-                value="BUY"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300 py-2"
-              >
-                買入
-              </TabsTrigger>
-              <TabsTrigger
-                value="SELL"
-                className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-slate-300 py-2"
-              >
-                賣出
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <div className="space-y-2">
-            <Label htmlFor="quantity" className="text-slate-300">
-              數量
+        <div className="p-6 space-y-4 max-h-[calc(80vh-160px)] overflow-y-auto">
+          {" "}
+          {/* 調整最大高度 */}
+          <div className="space-y-1 relative">
+            <Label htmlFor="stock-search" className="text-slate-300">
+              股票
             </Label>
-            <Input
-              id="quantity"
-              type="text" // 改為 text 以便更好地控制輸入
-              inputMode="numeric" // 提示數字鍵盤
-              value={quantity}
-              onChange={handleQuantityChange}
-              className="bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500 text-lg"
-              placeholder="例如：100"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-slate-300">價格</Label>
-            {/* 這裡可以添加 限價/市價 的選擇，目前簡化為顯示市價 */}
-            <div className="flex items-center justify-between p-3 bg-slate-700/50 rounded-md">
-              <span className="text-slate-400">市價</span>
-              <span className="text-lg font-semibold text-slate-100">
-                ${totalValue}
-              </span>
-            </div>
-            {/* 如果要實現限價:
-            <Tabs value={priceType} onValueChange={setPriceType} className="w-full mt-2">
-              <TabsList className="grid w-full grid-cols-2 bg-slate-700 p-1 h-auto">
-                <TabsTrigger value="market" className="data-[state=active]:bg-slate-600 data-[state=active]:text-white text-slate-300">市價</TabsTrigger>
-                <TabsTrigger value="limit" className="data-[state=active]:bg-slate-600 data-[state=active]:text-white text-slate-300">限價</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            {priceType === 'limit' && (
-              <div className="mt-2 space-y-2">
-                <Label htmlFor="limit-price" className="text-slate-300">限價價格</Label>
-                <Input
-                  id="limit-price"
-                  type="text"
-                  inputMode="decimal"
-                  value={limitPrice}
-                  onChange={handleLimitPriceChange}
-                  className="bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500"
-                  placeholder="輸入價格"
-                />
-              </div>
-            )}
-            <div className="flex items-center justify-between p-3 bg-slate-700/50 rounded-md mt-2">
-                <span className="text-slate-400">總金額</span>
-                <span className="text-lg font-semibold text-slate-100">${totalValue}</span>
-            </div>
-            */}
-          </div>
-
-          {/* 投資組合選擇 */}
-          <div className="space-y-2">
-            <Label htmlFor="portfolio" className="text-slate-300">
-              投資組合
-            </Label>
-            {isFetchingPortfolios ? (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
               <Input
-                value="載入投資組合中..."
-                disabled
-                className="bg-slate-700 border-slate-600"
+                id="stock-search"
+                type="text"
+                placeholder="輸入代號或名稱"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() =>
+                  searchQuery &&
+                  searchResults.length > 0 &&
+                  setShowSearchResults(true)
+                }
+                className="pl-10 bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500"
               />
-            ) : portfolios.length > 0 ? (
-              <Select
-                value={selectedPortfolioId}
-                onValueChange={(value) => setSelectedPortfolioId(value)}
-              >
-                <SelectTrigger
-                  id="portfolio"
-                  className="w-full bg-slate-700 border-slate-600 text-slate-100"
-                >
-                  <SelectValue placeholder="選擇一個投資組合" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  {portfolios.map((p) => (
-                    <SelectItem
-                      key={p.portfolio_id}
-                      value={p.portfolio_id.toString()}
-                      className="hover:bg-slate-700 focus:bg-slate-700"
+            </div>
+            {showSearchResults && (
+              <ScrollArea className="absolute z-10 w-full mt-1 max-h-40 bg-slate-700 border border-slate-600 rounded-md shadow-lg">
+                {isLoadingSearch && (
+                  <div className="p-2 text-center text-slate-400">
+                    <Spinner className="inline animate-spin h-4 w-4 mr-2" />
+                    搜尋中...
+                  </div>
+                )}
+                {!isLoadingSearch &&
+                  searchResults.length > 0 &&
+                  searchResults.map((stock) => (
+                    <div
+                      key={stock.stock_id}
+                      onClick={() => handleSelectStock(stock)}
+                      className="p-2 hover:bg-slate-600 cursor-pointer border-b border-slate-600 last:border-b-0"
                     >
-                      {p.portfolio_name} (ID: {p.portfolio_id})
-                    </SelectItem>
+                      <p className="font-medium text-slate-100">
+                        {stock.symbol} - {stock.name}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        價格: ${(stock.current_price || 0).toFixed(2)}
+                      </p>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="text-sm text-slate-400">
-                沒有可用的投資組合。
-                <Button
-                  variant="link"
-                  className="p-0 ml-1 h-auto text-blue-400"
-                  asChild
-                >
-                  <Link href="/portfolios">去建立一個</Link>
-                </Button>
-              </p>
+                {!isLoadingSearch &&
+                  searchResults.length === 0 &&
+                  searchQuery.length >= 1 && (
+                    <div className="p-2 text-center text-slate-400">
+                      找不到結果。
+                    </div>
+                  )}
+              </ScrollArea>
             )}
           </div>
+          {selectedStock && (
+            <>
+              <Tabs
+                value={actionType}
+                onValueChange={setActionType}
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-2 bg-slate-700 p-1 h-auto">
+                  <TabsTrigger
+                    value="BUY"
+                    className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300 py-2"
+                  >
+                    買入
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="SELL"
+                    className="data-[state=active]:bg-red-600 data-[state=active]:text-white text-slate-300 py-2"
+                  >
+                    賣出
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="quantity" className="text-slate-300">
+                    數量
+                  </Label>
+                  <Input
+                    id="quantity"
+                    type="text"
+                    inputMode="numeric"
+                    value={quantity}
+                    onChange={handleQuantityChange}
+                    className="bg-slate-700 border-slate-600 text-slate-100 placeholder:text-slate-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-slate-300">預估總額 (市價)</Label>
+                  <Input
+                    value={`$${totalValue}`}
+                    readOnly
+                    disabled
+                    className="bg-slate-700/50 border-slate-600 text-slate-100 font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label
+                  htmlFor="portfolio-select-trade"
+                  className="text-slate-300"
+                >
+                  投資組合
+                </Label>
+                {isFetchingPortfolios ? (
+                  <Input
+                    value="載入中..."
+                    disabled
+                    className="bg-slate-700 border-slate-600"
+                  />
+                ) : portfolios.length > 0 ? (
+                  <Select
+                    value={selectedPortfolioId}
+                    onValueChange={setSelectedPortfolioId}
+                    disabled={portfolios.length === 0}
+                  >
+                    <SelectTrigger
+                      id="portfolio-select-trade"
+                      className="w-full bg-slate-700 border-slate-600 text-slate-100"
+                    >
+                      <SelectValue placeholder="選擇投資組合" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
+                      {portfolios.map((p) => (
+                        <SelectItem
+                          key={p.portfolio_id}
+                          value={p.portfolio_id.toString()}
+                          className="hover:bg-slate-700 focus:bg-slate-700"
+                        >
+                          {p.portfolio_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-slate-400">
+                    沒有可用的投資組合。
+                    <Button
+                      variant="link"
+                      className="p-0 ml-1 h-auto text-blue-400"
+                      asChild
+                    >
+                      <Link href="/portfolios">去建立</Link>
+                    </Button>
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
-        <DialogFooter className="bg-slate-800 px-6 py-4 border-t border-slate-700 sm:justify-between">
-          <DialogClose asChild>
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto border-slate-600 hover:bg-slate-700 text-slate-300"
-            >
-              取消
-            </Button>
-          </DialogClose>
+        <DialogFooter className="px-6 py-4 border-t border-slate-700 sm:justify-between sticky bottom-0 bg-slate-800">
+          <Button
+            variant="outline"
+            onClick={handleDialogClose}
+            className="w-full sm:w-auto border-slate-600 hover:bg-slate-700 text-slate-800"
+          >
+            取消
+          </Button>
           <Button
             onClick={handleSubmitTrade}
-            disabled={isLoading || parseInt(quantity, 10) <= 0}
+            disabled={
+              isLoading ||
+              !selectedStock ||
+              parseInt(quantity, 10) <= 0 ||
+              !selectedPortfolioId
+            }
             className={`w-full sm:w-auto ${
               actionType === "BUY"
                 ? "bg-blue-600 hover:bg-blue-700"
                 : "bg-red-600 hover:bg-red-700"
             } text-white`}
           >
+            {isLoading ? (
+              <Spinner className="animate-spin h-4 w-4 mr-2" />
+            ) : null}
             {isLoading
               ? "處理中..."
               : actionType === "BUY"

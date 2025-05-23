@@ -238,6 +238,13 @@ function StockDetailPageContent() {
     setIsTradeDialogOpen(true);
   };
 
+  const handleTradeSuccess = () => {
+    setIsTradeDialogOpen(false);
+    // 可選：交易成功後刷新股票數據 (如果持倉影響了顯示) 或用戶餘額等
+    // fetchStockData(); // 如果需要刷新當前股票頁面的某些數據
+    toast({ title: "交易已提交", description: "您的模擬交易請求已發送。" });
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64 text-slate-400">
@@ -583,18 +590,27 @@ function StockDetailPageContent() {
           </TabContentComponent>
         </TabsContent>
       </Tabs>
+      {/* 渲染 TradeDialog */}
       {stockData && ( // 確保 stockData 存在才渲染 Dialog
         <TradeDialog
           isOpen={isTradeDialogOpen}
           onClose={() => setIsTradeDialogOpen(false)}
-          stockSymbol={stockData.symbol}
-          stockName={stockData.companyName}
-          currentPrice={stockData.currentPrice}
-          priceChange={stockData.priceChange}
-          percentChange={stockData.percentChange}
-          isUp={stockData.isUp}
+          initialSelectedStock={{
+            // <<<<< 主要修改在這裡
+            stock_id: stockData.symbol, // 假設用 symbol 作為 stock_id (或者 API 返回的真實 stock_id)
+            symbol: stockData.symbol,
+            name: stockData.companyName,
+            current_price: stockData.currentPrice,
+            is_up: stockData.isUp,
+            change_amount: stockData.priceChange,
+            change_percent: stockData.percentChange,
+            // 其他 TradeDialog 可能需要的股票資訊
+          }}
+          // portfolioId={/* 你需要一個方法來決定預設選哪個 portfolioId, 或讓用戶在彈窗選擇 */}
+          // 例如，可以讓用戶在個人設定中設置一個預設的交易組合
+          // 或者總是讓 TradeDialog 內部去獲取並讓用戶選擇
           initialAction={tradeDialogAction}
-          // portfolioId={selectedPortfolioId} // 如果需要指定投資組合
+          onTradeSubmitSuccess={handleTradeSuccess} // <<<< 確保有這個回呼
         />
       )}
     </div>
