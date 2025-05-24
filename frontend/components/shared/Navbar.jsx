@@ -21,10 +21,14 @@ import {
   LogOut, // Logout Icon
   Settings, // Settings Icon
   User, // Profile Icon
+  Loader2 as Spinner, // Loading Spinner
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react"; // 引入 signOut
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react"; // << 新增 useRef
+import { debounce } from "lodash";
+import { useToast } from "@/hooks/use-toast";
+import { ScrollArea } from "@/components/ui/scroll-area"; // 引入 ScrollArea
 
 // 假設你有一個函數來獲取使用者名稱的縮寫
 const getInitials = (name) => {
@@ -44,13 +48,118 @@ export default function Navbar({ user }) {
   // const currentUser = user || session?.user; // 優先使用 prop 傳入的 user
   const currentUser = user; // 直接使用從 layout 傳入的 user
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const { toast } = useToast(); // << 新增
 
-  const handleSearch = (e) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isLoadingSearch, setIsLoadingSearch] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchContainerRef = useRef(null); // << 新增: 用於檢測點擊外部
+
+  // 點擊外部隱藏搜尋結果
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target)
+      ) {
+        setShowSearchResults(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [searchContainerRef]);
+
+  const debouncedSearch = useCallback(
+    debounce(async (query) => {
+      if (!query || query.length < 2) {
+        // 至少輸入2個字元
+        setSearchResults([]);
+        setShowSearchResults(false); // 如果查詢太短，則隱藏
+        setIsLoadingSearch(false);
+        return;
+      }
+      setIsLoadingSearch(true);
+      setShowSearchResults(true); // 顯示下拉框
+      try {
+        // TODO: 呼叫 API 搜尋股票，API 應返回 symbol 和 name
+        // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stocks/search-suggestions?q=${encodeURIComponent(query)}`);
+        // if (!response.ok) throw new Error('Failed to fetch search suggestions');
+        // const data = await response.json(); // e.g., [{ stock_id: 's1', symbol: 'AAPL', name: 'Apple Inc.'}, ...]
+        // setSearchResults(data.slice(0, 7)); // 最多顯示7條建議
+
+        // 模擬 API
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const mockResults = [
+          { stock_id: "s1", symbol: "AAPL", name: "Apple Inc." },
+          { stock_id: "s2", symbol: "MSFT", name: "Microsoft Corp." },
+          { stock_id: "s3", symbol: "GOOGL", name: "Alphabet Inc." },
+          { stock_id: "s4", symbol: "TSLA", name: "Tesla, Inc." },
+          { stock_id: "s5", symbol: "AMZN", name: "Amazon.com, Inc." },
+        ]
+          .filter(
+            (stock) =>
+              stock.symbol.toLowerCase().includes(query.toLowerCase()) ||
+              stock.name.toLowerCase().includes(query.toLowerCase())
+          )
+          .slice(0, 7);
+        setSearchResults(mockResults);
+      } catch (error) {
+        console.error("Error fetching search suggestions:", error);
+        // toast({ variant: "destructive", title: "搜尋錯誤", description: "無法獲取搜尋建議。" }); // 可選
+        setSearchResults([]);
+      } finally {
+        setIsLoadingSearch(false);
+      }
+    }, 300), // 300ms 防抖
+    [] // toast 移除了，因為這裡可以不提示錯誤
+  );
+
+  useEffect(() => {
+    debouncedSearch(searchQuery);
+    return () => debouncedSearch.cancel();
+  }, [searchQuery, debouncedSearch]);
+
+  const handleSearchInputChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    if (query.length > 0) {
+      setShowSearchResults(true); // 輸入時就嘗試顯示（即使結果還沒回來）
+    } else {
+      setShowSearchResults(false); // 清空時隱藏
+      setSearchResults([]);
+    }
+  };
+
+  const handleSelectStock = (symbol) => {
+    router.push(`/stocks/${encodeURIComponent(symbol.toUpperCase())}`);
+    setSearchQuery(""); // 清空搜尋框
+    setSearchResults([]);
+    setShowSearchResults(false); // 隱藏建議列表
+  };
+
+  // 當用戶在搜尋框按下 Enter 時的行為
+  const handleSearchSubmit = (e) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/stocks?q=${encodeURIComponent(searchQuery.trim())}`);
-      // setSearchQuery(""); // 可選：提交後清空搜尋框
+    const query = searchQuery.trim();
+    if (query) {
+      // 如果搜尋結果中有完全匹配代號的，優先跳轉那個
+      const exactMatch = searchResults.find(
+        (r) => r.symbol.toUpperCase() === query.toUpperCase()
+      );
+      if (exactMatch) {
+        handleSelectStock(exactMatch.symbol);
+      } else if (searchResults.length > 0) {
+        // 如果沒有精確匹配，但有結果，跳轉到第一個結果的詳細頁
+        handleSelectStock(searchResults[0].symbol);
+      } else {
+        // 如果沒有任何結果，可以選擇跳轉到列表頁或提示無結果
+        router.push(`/stocks?q=${encodeURIComponent(query)}`); // 跳轉到列表頁進行更廣泛搜尋
+        setSearchQuery("");
+        setShowSearchResults(false);
+      }
     }
   };
 
@@ -60,7 +169,7 @@ export default function Navbar({ user }) {
   };
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-slate-700 bg-slate-800 px-4 md:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-700 bg-slate-800 px-4 md:px-6">
       {/* Mobile Sidebar Trigger & Logo (visible on mobile, hidden on sm+) */}
       <div className="flex items-center sm:hidden">
         <Sheet>
@@ -122,17 +231,56 @@ export default function Navbar({ user }) {
         </Sheet>
       </div>
 
-      {/* Search Bar (Centrally aligned on larger screens) */}
-      <div className="flex-1 flex justify-center">
-        <form onSubmit={handleSearch} className="relative w-full max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+      {/* Search Bar with Suggestions */}
+      <div className="flex-1 flex justify-center" ref={searchContainerRef}>
+        {" "}
+        {/* 將 ref 附加到這裡 */}
+        <form
+          onSubmit={handleSearchSubmit}
+          className="relative w-full max-w-md group h-10"
+        >
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
           <Input
             type="search"
-            placeholder="Search for stocks (股票代號或公司名稱)..."
+            placeholder="搜尋股票代號或名稱..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={handleSearchInputChange}
+            onFocus={() =>
+              searchQuery &&
+              searchResults.length > 0 &&
+              setShowSearchResults(true)
+            } // 聚焦時如果已有結果則顯示
             className="w-full rounded-lg bg-slate-700/80 pl-10 pr-4 py-2 text-sm border-slate-600 placeholder:text-slate-400 text-slate-100 focus:bg-slate-700 focus:border-blue-500"
           />
+          {showSearchResults && (
+            <ScrollArea className="absolute z-20 w-full  mt-1 max-h-80 bg-slate-700 border border-slate-600 rounded-md shadow-lg">
+              {isLoadingSearch && (
+                <div className="p-3 text-center text-slate-400 text-sm">
+                  <Spinner className="inline animate-spin h-4 w-4 mr-2" />
+                  搜尋中...
+                </div>
+              )}
+              {!isLoadingSearch &&
+                searchResults.length > 0 &&
+                searchResults.map((stock) => (
+                  <div
+                    key={stock.stock_id || stock.symbol}
+                    onClick={() => handleSelectStock(stock.symbol)}
+                    className="px-3 py-2.5 hover:bg-slate-600 cursor-pointer border-b border-slate-600 last:border-b-0"
+                  >
+                    <p className="font-medium text-slate-100">{stock.symbol}</p>
+                    <p className="text-xs text-slate-400">{stock.name}</p>
+                  </div>
+                ))}
+              {!isLoadingSearch &&
+                searchResults.length === 0 &&
+                searchQuery.length >= 2 && (
+                  <div className="p-3 text-center text-slate-400 text-sm">
+                    找不到符合 "{searchQuery}" 的建議。
+                  </div>
+                )}
+            </ScrollArea>
+          )}
         </form>
       </div>
 
