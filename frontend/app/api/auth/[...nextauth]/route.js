@@ -51,22 +51,24 @@ export const authOptions = {
     strategy: "jwt", // 使用 JWT sessions
   },
   callbacks: {
-    // async jwt({ token, user, account }) {
-    //   // Persist the OAuth access_token to the token right after signin
-    //   if (account && user) {
-    //     token.accessToken = account.access_token;
-    //     token.id = user.id; // 如果 user 物件有 id
-    //   }
-    //   return token;
-    // },
-    // async session({ session, token }) {
-    //   // Send properties to the client, like an access_token and user id from a provider.
-    //   if (session.user) {
-    //      session.user.id = token.id; // 假設 token 中有 id
-    //   }
-    //   session.accessToken = token.accessToken;
-    //   return session;
-    // },
+    async jwt({ token, user, account }) {
+      // Persist the OAuth access_token to the token right after signin
+      if (account && user) {
+        token.accessToken = account.access_token;
+        token.id = user.id; // 如果 user 物件有 id
+        token.provider = account.provider; // << 添加 provider
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      // Send properties to the client, like an access_token and user id from a provider.
+      if (session.user) {
+        session.user.id = token.id; // 假設 token 中有 id
+        session.user.provider = token.provider; // << 添加 provider
+      }
+      session.accessToken = token.accessToken;
+      return session;
+    },
   },
   pages: {
     signIn: "/login", // 指定你的登入頁面路徑
