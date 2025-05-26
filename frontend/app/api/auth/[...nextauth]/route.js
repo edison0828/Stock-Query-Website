@@ -24,18 +24,40 @@ export const authOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials, req) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials?.password) {
+          console.log("NextAuth Authorize: Missing credentials");
+          throw new Error("請輸入電子郵件和密碼"); // 會被 signIn 捕獲並顯示為錯誤
+        }
         try {
           const user = await prisma.users.findUnique({
             where: { email: credentials.email },
           });
-          if (!user || !user.password_hash) return null;
+
+          if (!user) {
+            console.log(`NextAuth Authorize: No user for ${credentials.email}`);
+            throw new Error("電子郵件或密碼錯誤");
+          }
+
+          if (!user.password_hash) {
+            console.log(
+              `NextAuth Authorize: User ${credentials.email} has no password (OAuth user?)`
+            );
+            throw new Error("此帳戶可能使用第三方登入，請嘗試其他登入方式");
+          }
+
           const isValidPassword = await verifyPassword(
             credentials.password,
             user.password_hash
           );
-          if (!isValidPassword) return null;
 
+          if (!isValidPassword) {
+            console.log(
+              `NextAuth Authorize: Invalid password for ${credentials.email}`
+            );
+            throw new Error("電子郵件或密碼錯誤");
+          }
+
+          // 如果驗證成功，更新用戶的 last_login 時間
           await prisma.users.update({
             where: { user_id: user.user_id },
             data: { last_login: new Date() },
@@ -48,8 +70,36 @@ export const authOptions = {
             // image: user.image, // 如果你資料庫有 image 欄位
           };
         } catch (error) {
-          console.error("Credentials Authorize Error:", error);
-          return null;
+          console.error(
+            "NextAuth Authorize Catch Block - Original Error:",
+            error.message
+          ); // 打印原始錯誤訊息
+
+          // 檢查是否是我們在 try 塊中明確拋出的錯誤類型
+          // 這些是我們希望直接傳遞給前端的特定錯誤訊息
+          const knownErrorMessages = [
+            "請輸入電子郵件和密碼",
+            "電子郵件或密碼錯誤",
+            "此帳戶可能使用第三方登入，請嘗試其他登入方式",
+          ];
+
+          if (
+            error instanceof Error &&
+            knownErrorMessages.includes(error.message)
+          ) {
+            console.log(
+              "NextAuth Authorize Catch Block - Rethrowing known error:",
+              error.message
+            );
+            throw error; // 重新拋出我們自訂的、已知的錯誤
+          }
+
+          // 對於其他所有未預期的錯誤 (例如 Prisma 連接錯誤、查詢錯誤等)
+          console.log(
+            "NextAuth Authorize Catch Block - Throwing generic internal error for:",
+            error.message
+          );
+          throw new Error("登入服務暫時無法使用，請稍後再試。"); // 一個更通用的內部錯誤訊息
         }
       },
     }),
@@ -65,6 +115,10 @@ export const authOptions = {
 
       // ... (在 signIn 回呼中)
       if (account.provider === "google") {
+        if (!profile?.email) {
+          console.error("Google profile missing email");
+          return false; // 阻止登入
+        }
         try {
           // 1. 優先嘗試通過 google_id 查找用戶 (如果用戶之前已用 Google 登入過)
           let dbUser = await prisma.users.findUnique({
@@ -92,7 +146,9 @@ export const authOptions = {
               });
             } else {
               // 3. Email 也不存在，創建全新用戶
-              let username = profile.name.replace(/\s+/g, "").toLowerCase();
+              let username =
+                profile.name.replace(/\s+/g, "").toLowerCase() ||
+                profile.email.split("@")[0]; // 使用 Google 名稱或 Email 前綴作為用戶名
               const existingUsername = await prisma.users.findUnique({
                 where: { username },
               });
@@ -111,7 +167,7 @@ export const authOptions = {
                   google_id: profile.sub, // 儲存 google_id
                   last_login: new Date(),
                   created_at: new Date(),
-                  // password_hash: null, // OAuth 用戶通常沒有本地密碼
+                  password_hash: null, // OAuth 用戶通常沒有本地密碼
                 },
               });
             }
@@ -122,6 +178,10 @@ export const authOptions = {
               data: {
                 last_login: new Date(),
                 email: profile.email, // 保持 Email 與 Google 同步 (如果允許)
+                username:
+                  dbUser.username ||
+                  profile.name?.replace(/\s+/g, "").toLowerCase() ||
+                  profile.email.split("@")[0], // 如果 username 為空則更新
                 // image: profile.picture, // 保持頭像與 Google 同步
               },
             });
@@ -155,6 +215,7 @@ export const authOptions = {
         // token.image = user.image;
       }
       if (account) {
+        // 這裡的 account 只在 OAuth 登入時可用
         token.provider = account.provider;
         // token.accessToken = account.access_token; // 如果需要儲存 access token
       }
@@ -177,6 +238,7 @@ export const authOptions = {
   },
   pages: {
     signIn: "/login", // 指定你的登入頁面路徑
+    error: "/login", // 登入錯誤時可以跳轉回登入頁並帶上 ?error=...
     // error: '/auth/error', // (可選) 自訂錯誤頁面
   },
   secret: process.env.NEXTAUTH_SECRET,

@@ -52,44 +52,34 @@ export default function RegisterPage() {
 
     try {
       // 替換成你的 FastAPI 後端註冊 API 端點 URL
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/users/register`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            username,
-            email,
-            password,
-          }),
-        }
-      );
+      const response = await fetch("/api/register", {
+        // <<< 確認 URL
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        // 後端應該返回包含 'detail' 的錯誤訊息
         const errorMessage =
-          data.detail || `註冊失敗 (狀態碼: ${response.status})`;
+          data.message || `註冊失敗 (狀態碼: ${response.status})`;
         setError(errorMessage);
-        // 如果後端返回更詳細的欄位錯誤，可以在這裡處理
-        // 例如：if (data.errors) setFieldErrors(data.errors);
+        if (data.field) {
+          // 如果 API 返回了特定欄位的錯誤
+          setFieldErrors({ [data.field]: data.message });
+        }
         toast({
-          // 使用 Toast 顯示錯誤
           variant: "destructive",
           title: "註冊失敗",
           description: errorMessage,
         });
       } else {
-        // 註冊成功
         toast({
-          // 使用 Toast 顯示成功訊息
           title: "註冊成功！",
-          description: "您現在可以使用您的帳號登入。",
+          description: data.message || "您現在可以使用您的帳號登入。",
         });
-        router.push("/login"); // 註冊成功後跳轉到登入頁面
+        router.push("/login");
       }
     } catch (err) {
       console.error("Registration error:", err);

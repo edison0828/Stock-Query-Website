@@ -34,6 +34,10 @@ import {
 } from "recharts"; // 用於迷你圖表
 import { Button } from "@/components/ui/button";
 
+// --- NextAuth.js Imports ---
+import { useSession } from "next-auth/react";
+import { redirect } from "next/navigation"; // For App Router
+
 // 模擬數據 (之後會從 API 獲取)
 const mockWatchlist = [
   {
@@ -146,8 +150,45 @@ const MiniTrendChart = ({ data, isUp }) => (
 );
 
 export default function DashboardPage() {
+  // --- Session Handling ---
+  const { data: session, status } = useSession({
+    required: true, // 如果未認證，會自動觸發 onUnauthenticated 或跳轉到 signIn page
+    onUnauthenticated() {
+      // 當 required: true 且檢測到用戶未認證時執行的回呼
+      redirect("/login?callbackUrl=/dashboard"); // 明確指定 callbackUrl
+    },
+  });
+
+  // 1. 處理載入狀態
+  if (status === "loading") {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-theme(space.24))]">
+        {" "}
+        {/* 簡易置中 */}
+        <p className="text-slate-400">儀表板載入中...</p>
+        {/* 或者使用骨架屏 (Skeleton UI) 組件 */}
+      </div>
+    );
+  }
+
+  // 2. 處理未認證狀態 (理論上 required: true 和 onUnauthenticated 已經處理，但作為雙重保險)
+  //    或者如果 onUnauthenticated 由於某些原因沒有成功重定向
+  if (status === "unauthenticated" || !session || !session.user) {
+    // redirect('/login?callbackUrl=/dashboard'); // onUnauthenticated 應該已經處理了
+    // 可以返回 null 或者一個提示信息，因為重定向應該已經發生或即將發生
+    return (
+      <p className="text-slate-400">需要登入才能查看儀表板。正在重新導向...</p>
+    );
+  }
+
+  // --- 到這裡，可以安全地假設 session 和 session.user 存在 ---
+  // 你可以在這裡使用 session.user 的信息，例如：
+  // const userName = session.user.name;
+  // const userRole = session.user.role;
   return (
     <div className="grid gap-6 md:gap-8">
+      {/* 可以考慮在這裡顯示用戶名等 */}
+      {/* <h2 className="text-2xl font-semibold text-slate-100 mb-2">歡迎回來, {session.user.name}!</h2> */}
       {/* Row 1: Watchlist and Portfolio Summary */}
       <div className="grid gap-6 md:grid-cols-3">
         {/* Watchlist Overview (Col Span 2) */}
