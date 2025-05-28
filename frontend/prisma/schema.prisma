@@ -10,57 +10,49 @@ datasource db {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model dividends {
-  dividend_id      BigInt    @id @default(autoincrement())
-  stock_id         BigInt
-  ex_dividend_date DateTime  @db.Date
-  payment_date     DateTime? @db.Date
-  amount_per_share Decimal   @db.Decimal(10, 4)
-  stocks           stocks    @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_Dividends_Stocks1")
+  stock_id                String   @db.VarChar(20)
+  dividend_date           DateTime @db.Date
+  pre_ex_dividend_close   Decimal? @db.Decimal(18, 6)
+  reference_price         Decimal? @db.Decimal(18, 6)
+  dividend_value          Decimal? @db.Decimal(18, 6)
+  ex_type                 String?  @db.VarChar(20)
+  opening_reference_price Decimal? @db.Decimal(18, 6)
+  adjusted_price          Decimal? @db.Decimal(18, 6)
+  stocks                  stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_Dividends_Stocks1")
 
+  @@id([stock_id, dividend_date])
   @@index([stock_id], map: "fk_Dividends_Stocks1_idx")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-model exchanges {
-  exchange_id  Int      @id
-  name         String   @unique(map: "name") @db.VarChar(255)
-  abbreviation String   @unique(map: "abbreviation") @db.VarChar(50)
-  country      String?  @db.VarChar(100)
-  timezone     String?  @db.VarChar(100)
-  stocks       stocks[]
-}
-
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model financialreports {
-  report_id          BigInt    @id @default(autoincrement())
-  stock_id           BigInt
-  report_date        DateTime  @db.Date
-  period_type        String    @db.VarChar(20)
-  filing_date        DateTime? @db.Date
-  currency           String    @db.VarChar(10)
-  revenue            Decimal?  @db.Decimal(20, 2)
-  net_income         Decimal?  @db.Decimal(20, 2)
-  eps                Decimal?  @db.Decimal(10, 4)
-  total_assets       Decimal?  @db.Decimal(20, 2)
-  total_liabilities  Decimal?  @db.Decimal(20, 2)
-  shareholder_equity Decimal?  @db.Decimal(20, 2)
-  stocks             stocks    @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_FinancialReports_Stocks1")
+  stock_id                     String   @db.VarChar(20)
+  year                         BigInt
+  period_type                  String   @db.VarChar(20)
+  eps                          Decimal? @db.Decimal(10, 4)
+  revenue                      BigInt?
+  Income                       BigInt?
+  non_operating_income_expense BigInt?
+  net_income                   BigInt?
+  stocks                       stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_FinancialReports_Stocks1")
 
-  @@unique([stock_id, report_date, period_type], map: "uq_stock_report_period")
+  @@id([stock_id, period_type, year])
+  @@unique([stock_id, period_type, year], map: "uq_stock_report_period")
   @@index([stock_id], map: "fk_FinancialReports_Stocks1_idx")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model historicalprices {
-  stock_id             String   @db.VarChar(20)
-  date                 DateTime @db.Date
-  open_price           Decimal? @db.Decimal(18, 6)
-  high_price           Decimal? @db.Decimal(18, 6)
-  low_price            Decimal? @db.Decimal(18, 6)
-  close_price          Decimal? @db.Decimal(18, 6)
-  adjusted_close_price Decimal? @db.Decimal(18, 6)
-  volume               BigInt?
-  stocks               stocks   @relation(fields: [stock_id], references: [ticker_symbol], onDelete: NoAction, onUpdate: NoAction, map: "historicalprices_ibfk_1")
+  stock_id         String   @db.VarChar(20)
+  date             DateTime @db.Date
+  open_price       Decimal? @db.Decimal(18, 6)
+  high_price       Decimal? @db.Decimal(18, 6)
+  low_price        Decimal? @db.Decimal(18, 6)
+  close_price      Decimal? @db.Decimal(18, 6)
+  volume           BigInt?
+  number_of_trades BigInt?
+  trading_value    BigInt?
+  stocks           stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "historicalprices_ibfk_1")
 
   @@id([stock_id, date])
 }
@@ -81,40 +73,35 @@ model portfolios {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model stocks {
-  stock_id         BigInt             @id
-  ticker_symbol    String             @unique(map: "ticker_symbol") @db.VarChar(20)
+  stock_id         String             @id @db.VarChar(20)
   company_name     String             @db.VarChar(255)
   market_type      String             @db.VarChar(255)
   security_status  String             @db.VarChar(255)
-  exchange_id      Int
   transfer_agent   String             @db.VarChar(255)
   currency         String             @db.VarChar(10)
   dividends        dividends[]
   financialreports financialreports[]
   historicalprices historicalprices[]
-  exchanges        exchanges          @relation(fields: [exchange_id], references: [exchange_id], onDelete: NoAction, onUpdate: NoAction, map: "stocks_ibfk_1")
   stocksplits      stocksplits[]
   transactions     transactions[]
   watchlistitems   watchlistitems[]
-
-  @@index([exchange_id], map: "exchange_id")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model stocksplits {
   split_id           BigInt   @id @default(autoincrement())
-  stock_id           BigInt
+  stock_id           String   @db.VarChar(20)
   split_date         DateTime @db.Date
   split_ratio_before Decimal  @db.Decimal(10, 4)
   split_ratio_after  Decimal  @db.Decimal(10, 4)
-  stocks             stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_StockSplits_Stocks1")
+  stocks             stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_stocksplits_stocks1")
 
   @@index([stock_id], map: "fk_StockSplits_Stocks1_idx")
 }
 
 /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
 model test {
-  stock_id Int
+  stock_id String   @db.VarChar(11)
   date     DateTime @db.Date
   open     Float    @db.Float
   close    Float    @db.Float
@@ -126,7 +113,7 @@ model test {
 model transactions {
   transaction_id   BigInt                        @id @default(autoincrement())
   portfolio_id     BigInt
-  stock_id         BigInt
+  stock_id         String                        @db.VarChar(20)
   transaction_type transactions_transaction_type
   transaction_date DateTime                      @default(now()) @db.Timestamp(0)
   quantity         Decimal                       @db.Decimal(18, 6)
@@ -134,7 +121,7 @@ model transactions {
   commission       Decimal?                      @default(0.00) @db.Decimal(10, 2)
   currency         String                        @db.VarChar(10)
   portfolios       portfolios                    @relation(fields: [portfolio_id], references: [portfolio_id], onDelete: Cascade, map: "fk_Transactions_Portfolios1")
-  stocks           stocks                        @relation(fields: [stock_id], references: [stock_id], onDelete: NoAction, map: "fk_Transactions_Stocks1")
+  stocks           stocks                        @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_Transactions_stocks1")
 
   @@index([portfolio_id], map: "fk_Transactions_Portfolios1_idx")
   @@index([stock_id], map: "fk_Transactions_Stocks1_idx")
@@ -142,14 +129,14 @@ model transactions {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model users {
-  google_id      String?           @unique // 用於儲存 Google 的 sub ID，方便關聯和查找
   user_id        BigInt           @id @default(autoincrement())
   username       String           @unique(map: "username_UNIQUE") @db.VarChar(100)
   email          String           @unique(map: "email_UNIQUE") @db.VarChar(255)
-  role           String            @default("user")
-  password_hash String?   // <<< 在這裡加上問號，使其變為可選
+  password_hash  String?          @db.VarChar(255)
   created_at     DateTime         @default(now()) @db.Timestamp(0)
   last_login     DateTime?        @db.Timestamp(0)
+  google_id      String?          @unique(map: "google_id") @db.VarChar(255)
+  role           String           @default("user") @db.VarChar(255)
   portfolios     portfolios[]
   watchlistitems watchlistitems[]
 }
@@ -157,11 +144,11 @@ model users {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model watchlistitems {
   user_id  BigInt
-  stock_id BigInt
+  stock_id String   @db.VarChar(20)
   added_at DateTime @default(now()) @db.Timestamp(0)
   notes    String?  @db.Text
-  stocks   stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_WatchlistItems_Stocks1")
   users    users    @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_WatchlistItems_Users1")
+  stocks   stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_Watchlistitems_stocks1")
 
   @@id([user_id, stock_id])
   @@index([stock_id], map: "fk_WatchlistItems_Stocks1_idx")
