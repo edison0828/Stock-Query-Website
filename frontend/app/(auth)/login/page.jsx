@@ -29,29 +29,29 @@ export default function LoginPage() {
   const [formError, setFormError] = useState(null); // 用於表單提交時的錯誤
 
   const router = useRouter();
-  const searchParams = useSearchParams();
+  // const searchParams = useSearchParams();
   const { data: session, status } = useSession(); // status: "loading", "authenticated", "unauthenticated"
   const { toast } = useToast();
 
-  // --- 2. 使用 useEffect 處理副作用 ---
-  useEffect(() => {
-    // 處理來自 URL 的錯誤參數 (例如 NextAuth.js pages.error 跳轉過來的)
-    const errorFromUrl = searchParams.get("error");
-    if (errorFromUrl && !formError) {
-      // 只有在本地 formError 為空時才從 URL 設置
-      let errorMessage = "";
-      switch (errorFromUrl) {
-        case "CredentialsSignin":
-          errorMessage = "電子郵件或密碼錯誤。";
-          break;
-        // 可以根據需要添加更多 NextAuth.js 錯誤代碼的處理
-        default:
-          errorMessage = decodeURIComponent(errorFromUrl); // 處理自訂錯誤
-      }
-      setFormError(errorMessage); // 更新錯誤狀態
-      // toast({ variant: "destructive", title: "登入提示", description: errorMessage }); // 可以選擇是否在這裡 toast
-    }
-  }, [searchParams, formError, toast]); // 依賴項
+  // // --- 2. 使用 useEffect 處理副作用 ---
+  // useEffect(() => {
+  //   // 處理來自 URL 的錯誤參數 (例如 NextAuth.js pages.error 跳轉過來的)
+  //   const errorFromUrl = searchParams.get("error");
+  //   if (errorFromUrl && !formError) {
+  //     // 只有在本地 formError 為空時才從 URL 設置
+  //     let errorMessage = "";
+  //     switch (errorFromUrl) {
+  //       case "CredentialsSignin":
+  //         errorMessage = "電子郵件或密碼錯誤。";
+  //         break;
+  //       // 可以根據需要添加更多 NextAuth.js 錯誤代碼的處理
+  //       default:
+  //         errorMessage = decodeURIComponent(errorFromUrl); // 處理自訂錯誤
+  //     }
+  //     setFormError(errorMessage); // 更新錯誤狀態
+  //     // toast({ variant: "destructive", title: "登入提示", description: errorMessage }); // 可以選擇是否在這裡 toast
+  //   }
+  // }, [searchParams, formError, toast]); // 依賴項
 
   useEffect(() => {
     // 處理已認證用戶的跳轉
