@@ -34,7 +34,7 @@ model financialreports {
   Income                       BigInt?
   non_operating_income_expense BigInt?
   net_income                   BigInt?
-  stocks                       stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_FinancialReports_Stocks1")
+  stocks                       stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_financialreports_stocks1")
 
   @@id([stock_id, period_type, year])
   @@unique([stock_id, period_type, year], map: "uq_stock_report_period")
@@ -52,7 +52,7 @@ model historicalprices {
   volume           BigInt?
   number_of_trades BigInt?
   trading_value    BigInt?
-  stocks           stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "historicalprices_ibfk_1")
+  stocks           stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_historicalprices_stocks1")
 
   @@id([stock_id, date])
 }
@@ -101,10 +101,11 @@ model stocksplits {
 
 /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
 model test {
-  stock_id String   @db.VarChar(11)
-  date     DateTime @db.Date
-  open     Float    @db.Float
-  close    Float    @db.Float
+  my_row_id BigInt   @id @db.UnsignedBigInt
+  stock_id  String   @db.VarChar(11)
+  date      DateTime @db.Date
+  open      Float    @db.Float
+  close     Float    @db.Float
 
   @@ignore
 }
