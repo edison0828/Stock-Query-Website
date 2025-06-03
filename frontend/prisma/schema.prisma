@@ -1,7 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../lib/generated/prisma"
-  binaryTargets = ["native",  "rhel-openssl-3.0.x"]
+  provider      = "prisma-client-js"
+  output        = "../lib/generated/prisma"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -56,6 +56,7 @@ model historicalprices {
   stocks           stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_historicalprices_stocks1")
 
   @@id([stock_id, date])
+  @@index([stock_id, date(sort: Desc)], map: "idx_historicalprices_stock_date")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -86,6 +87,11 @@ model stocks {
   stocksplits      stocksplits[]
   transactions     transactions[]
   watchlistitems   watchlistitems[]
+
+  @@index([company_name], map: "idx_stocks_company_name")
+  @@index([market_type], map: "idx_stocks_market_type")
+  @@index([stock_id, company_name], map: "idx_stocks_search")
+  @@index([security_status], map: "idx_stocks_security_status")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

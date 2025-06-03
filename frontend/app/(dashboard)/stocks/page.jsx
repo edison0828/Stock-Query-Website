@@ -136,18 +136,31 @@ const mockStockList = [
   })),
 ];
 
-const mockExchanges = [
-  { id: "ALL", name: "All Exchanges" },
-  { id: "NASDAQ", name: "NASDAQ" },
-  { id: "NYSE", name: "NYSE" },
-  { id: "TWSE", name: "TWSE" },
+// const mockExchanges = [
+//   { id: "ALL", name: "All Exchanges" },
+//   { id: "NASDAQ", name: "NASDAQ" },
+//   { id: "NYSE", name: "NYSE" },
+//   { id: "TWSE", name: "TWSE" },
+// ];
+// const mockIndustries = [
+//   { id: "ALL", name: "All Industries" },
+//   { id: "Technology", name: "Technology" },
+//   { id: "Semiconductors", name: "Semiconductors" },
+//   { id: "E-Commerce", name: "E-Commerce" },
+//   { id: "Automotive", name: "Automotive" },
+// ];
+const mockMarketTypes = [
+  { id: "ALL", name: "全部市場類型" },
+  { id: "上市", name: "上市" },
+  { id: "上櫃", name: "上櫃" },
+  { id: "終止上市櫃", name: "終止上市櫃" },
 ];
-const mockIndustries = [
-  { id: "ALL", name: "All Industries" },
-  { id: "Technology", name: "Technology" },
-  { id: "Semiconductors", name: "Semiconductors" },
-  { id: "E-Commerce", name: "E-Commerce" },
-  { id: "Automotive", name: "Automotive" },
+
+const mockSecurityStatuses = [
+  { id: "ALL", name: "全部狀態" },
+  { id: "正常", name: "正常" },
+  { id: "下市櫃/暫停交易", name: "下市櫃/暫停交易" },
+  { id: "減資/停止帳簿劃撥", name: "減資/停止帳簿劃撥" },
 ];
 
 const ITEMS_PER_PAGE = 10;
@@ -158,11 +171,11 @@ export default function StockSearchListPage() {
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || ""); // 從 URL q 參數初始化
-  const [selectedExchange, setSelectedExchange] = useState(
-    searchParams.get("exchange") || "ALL"
+  const [selectedMarketType, setSelectedMarketType] = useState(
+    searchParams.get("market_type") || "ALL"
   );
-  const [selectedIndustry, setSelectedIndustry] = useState(
-    searchParams.get("industry") || "ALL"
+  const [selectedSecurityStatus, setSelectedSecurityStatus] = useState(
+    searchParams.get("security_status") || "ALL"
   );
   const [currentPage, setCurrentPage] = useState(
     parseInt(searchParams.get("page") || "1", 10)
@@ -172,23 +185,19 @@ export default function StockSearchListPage() {
   const [totalStocks, setTotalStocks] = useState(0); // 總股票數，用於分頁
   const [isLoading, setIsLoading] = useState(false);
 
-  const [exchanges, setExchanges] = useState(mockExchanges); // 之後從 API 獲取
-  const [industries, setIndustries] = useState(mockIndustries); // 之後從 API 獲取
+  const [marketTypes, setMarketTypes] = useState(mockMarketTypes);
+  const [securityStatuses, setSecurityStatuses] =
+    useState(mockSecurityStatuses);
 
   const totalPages = Math.ceil(totalStocks / ITEMS_PER_PAGE);
 
-  // 獲取篩選器數據 (交易所、行業)
-  useEffect(() => {
-    // TODO: 從 API 獲取交易所和行業列表
-    // setExchanges([...mockExchanges]);
-    // setIndustries([...mockIndustries]);
-  }, []);
-
-  const buildApiParams = (page, query, exchange, industry) => {
+  const buildApiParams = (page, query, marketType, securityStatus) => {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
-    if (exchange && exchange !== "ALL") params.set("exchange", exchange);
-    if (industry && industry !== "ALL") params.set("industry", industry);
+    if (marketType && marketType !== "ALL")
+      params.set("market_type", marketType);
+    if (securityStatus && securityStatus !== "ALL")
+      params.set("security_status", securityStatus);
     params.set("page", page.toString());
     params.set("limit", ITEMS_PER_PAGE.toString());
     return params;
@@ -196,9 +205,9 @@ export default function StockSearchListPage() {
 
   // 核心的獲取股票數據函數
   const fetchStocksData = useCallback(
-    async (page, query, exchange, industry) => {
+    async (page, query, marketType, securityStatus) => {
       setIsLoading(true);
-      const apiParams = buildApiParams(page, query, exchange, industry);
+      const apiParams = buildApiParams(page, query, marketType, securityStatus);
       const urlParamsForRouter = new URLSearchParams(apiParams); // 複製一份用於 router，不包含 limit
       urlParamsForRouter.delete("limit");
       if (page === 1) urlParamsForRouter.delete("page"); // 如果是第一頁，URL中可以省略 page=1
@@ -213,39 +222,19 @@ export default function StockSearchListPage() {
       }
 
       try {
-        // TODO: 呼叫 API 獲取股票列表，包含分頁和篩選參數
-        // const apiUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stocks?page=${page}&limit=${ITEMS_PER_PAGE}&q=${encodeURIComponent(query)}&exchange=${exchange}&industry=${industry}`;
-        // const response = await fetch(apiUrl);
-        // if (!response.ok) throw new Error('Failed to fetch stocks');
-        // const data = await response.json(); // API 應返回 { items: [...], total: ... }
-        // setStocks(data.items);
-        // setTotalStocks(data.total);
-        // setCurrentPage(page);
+        // 使用內部 API 路由
+        const apiUrl = `/api/stocks`;
+        const response = await fetch(`${apiUrl}?${apiParams.toString()}`);
 
-        // 模擬 API
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        let filteredStocks = mockStockList;
-        if (query)
-          filteredStocks = filteredStocks.filter(
-            (s) =>
-              s.symbol.toLowerCase().includes(query.toLowerCase()) ||
-              s.name.toLowerCase().includes(query.toLowerCase())
-          );
-        if (industry && industry !== "ALL")
-          filteredStocks = filteredStocks.filter(
-            (s) => s.industry === industry
-          );
-        if (exchange && exchange !== "ALL") {
-          /* 模擬交易所篩選 */
+        if (!response.ok) {
+          throw new Error(`API request failed with status ${response.status}`);
         }
 
-        setTotalStocks(filteredStocks.length);
-        const paginatedStocks = filteredStocks.slice(
-          (page - 1) * ITEMS_PER_PAGE,
-          page * ITEMS_PER_PAGE
-        );
-        setStocks(paginatedStocks);
-        setCurrentPage(page); // 更新當前頁狀態
+        const data = await response.json();
+
+        setStocks(data.items || []);
+        setTotalStocks(data.total || 0);
+        setCurrentPage(page);
       } catch (error) {
         console.error("Error fetching stocks:", error);
         toast({
@@ -264,24 +253,27 @@ export default function StockSearchListPage() {
 
   // 使用 debounce 來處理搜尋框輸入
   const debouncedSearch = useCallback(
-    debounce((currentSearchTerm, currentExchange, currentIndustry) => {
-      fetchStocksData(1, currentSearchTerm, currentExchange, currentIndustry);
+    debounce((currentSearchTerm, currentMarketType, currentSecurityStatus) => {
+      fetchStocksData(
+        1,
+        currentSearchTerm,
+        currentMarketType,
+        currentSecurityStatus
+      );
     }, 500),
     [fetchStocksData]
   );
 
   // Effect for searchTerm changes (user typing)
   useEffect(() => {
-    // 只有當 searchTerm 與 URL 中的 'q' 不同時，才認為是手動輸入，觸發 debounce
-    // 避免從 Navbar 跳轉過來時重複觸發
     const queryFromUrl = searchParams.get("q") || "";
     if (searchTerm !== queryFromUrl) {
-      debouncedSearch(searchTerm, selectedExchange, selectedIndustry);
+      debouncedSearch(searchTerm, selectedMarketType, selectedSecurityStatus);
     }
   }, [
     searchTerm,
-    selectedExchange,
-    selectedIndustry,
+    selectedMarketType,
+    selectedSecurityStatus,
     searchParams,
     debouncedSearch,
   ]);
@@ -289,42 +281,71 @@ export default function StockSearchListPage() {
   // Effect for initial load from URL or direct navigation
   useEffect(() => {
     const queryFromUrl = searchParams.get("q") || "";
-    const exchangeFromUrl = searchParams.get("exchange") || "ALL";
-    const industryFromUrl = searchParams.get("industry") || "ALL";
+    const marketTypeFromUrl = searchParams.get("market_type") || "ALL";
+    const securityStatusFromUrl = searchParams.get("security_status") || "ALL";
     const pageFromUrl = parseInt(searchParams.get("page") || "1", 10);
 
     // 設置狀態以匹配 URL，這樣 UI 和 URL 保持同步
     // 這些 setState 不會立即觸發上面的 searchTerm useEffect，因為我們有條件判斷
     setSearchTerm(queryFromUrl);
-    setSelectedExchange(exchangeFromUrl);
-    setSelectedIndustry(industryFromUrl);
+    setSelectedMarketType(marketTypeFromUrl);
+    setSelectedSecurityStatus(securityStatusFromUrl);
     // setCurrentPage(pageFromUrl); // currentPage 由 fetchStocksData 內部設置
 
     // 初始載入時獲取數據
     fetchStocksData(
       pageFromUrl,
       queryFromUrl,
-      exchangeFromUrl,
-      industryFromUrl
+      marketTypeFromUrl,
+      securityStatusFromUrl
     );
   }, []); // 空依賴數組，只在組件掛載時執行一次以同步 URL 參數
 
   // Handler for filter button
   const handleApplyFilters = () => {
-    fetchStocksData(1, searchTerm, selectedExchange, selectedIndustry);
+    fetchStocksData(1, searchTerm, selectedMarketType, selectedSecurityStatus);
   };
 
   // Handler for page change
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages && newPage !== currentPage) {
-      fetchStocksData(newPage, searchTerm, selectedExchange, selectedIndustry);
+      fetchStocksData(
+        newPage,
+        searchTerm,
+        selectedMarketType,
+        selectedSecurityStatus
+      );
     }
   };
 
-  const getCurrencySymbol = (currencyCode) => {
-    if (currencyCode === "USD") return "$";
-    if (currencyCode === "TWD") return "NT$";
-    return "";
+  const formatPrice = (price, currency = "TWD") => {
+    if (price === null || price === undefined) return "N/A";
+
+    const symbol = currency === "USD" ? "$" : "NT$";
+    return `${symbol}${Number(price).toFixed(2)}`;
+  };
+
+  const formatPriceChange = (change, percentage) => {
+    if (
+      change === null ||
+      change === undefined ||
+      percentage === null ||
+      percentage === undefined
+    ) {
+      return null;
+    }
+
+    const isPositive = change > 0;
+    const isNegative = change < 0;
+    const isFlat = change === 0;
+
+    return {
+      change: Number(change).toFixed(2),
+      percentage: Number(percentage).toFixed(2),
+      isPositive,
+      isNegative,
+      isFlat,
+    };
   };
 
   return (
@@ -358,29 +379,29 @@ export default function StockSearchListPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-4 md:flex-shrink-0 md:w-auto">
             <div className="sm:col-span-1">
               <Label
-                htmlFor="exchange-filter"
+                htmlFor="market-type-filter"
                 className="text-sm font-medium text-slate-300"
               >
-                交易所
+                市場類型
               </Label>
               <Select
-                value={selectedExchange}
-                onValueChange={setSelectedExchange}
+                value={selectedMarketType}
+                onValueChange={setSelectedMarketType}
               >
                 <SelectTrigger
-                  id="exchange-filter"
+                  id="market-type-filter"
                   className="mt-1 bg-slate-700 border-slate-600 text-slate-100"
                 >
-                  <SelectValue placeholder="所有交易所" />
+                  <SelectValue placeholder="全部市場類型" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  {exchanges.map((ex) => (
+                  {marketTypes.map((mt) => (
                     <SelectItem
-                      key={ex.id}
-                      value={ex.id}
+                      key={mt.id}
+                      value={mt.id}
                       className="hover:bg-slate-700 focus:bg-slate-700"
                     >
-                      {ex.name}
+                      {mt.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -388,29 +409,29 @@ export default function StockSearchListPage() {
             </div>
             <div className="sm:col-span-1">
               <Label
-                htmlFor="industry-filter"
+                htmlFor="security-status-filter"
                 className="text-sm font-medium text-slate-300"
               >
-                行業
+                證券狀態
               </Label>
               <Select
-                value={selectedIndustry}
-                onValueChange={setSelectedIndustry}
+                value={selectedSecurityStatus}
+                onValueChange={setSelectedSecurityStatus}
               >
                 <SelectTrigger
-                  id="industry-filter"
+                  id="security-status-filter"
                   className="mt-1 bg-slate-700 border-slate-600 text-slate-100"
                 >
-                  <SelectValue placeholder="所有行業" />
+                  <SelectValue placeholder="全部狀態" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  {industries.map((ind) => (
+                  {securityStatuses.map((ss) => (
                     <SelectItem
-                      key={ind.id}
-                      value={ind.id}
+                      key={ss.id}
+                      value={ss.id}
                       className="hover:bg-slate-700 focus:bg-slate-700"
                     >
-                      {ind.name}
+                      {ss.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -420,7 +441,7 @@ export default function StockSearchListPage() {
               onClick={handleApplyFilters}
               className="mt-1 sm:mt-0 sm:self-end bg-blue-600 hover:bg-blue-700 sm:col-span-1 md:w-auto w-full"
             >
-              <Filter className="mr-2 h-4 w-4" /> Apply Filters
+              <Filter className="mr-2 h-4 w-4" /> 套用篩選
             </Button>
           </div>
         </CardContent>
@@ -429,7 +450,9 @@ export default function StockSearchListPage() {
       {/* 股票列表 */}
       <Card className="bg-slate-800 border-slate-700 text-slate-200">
         <CardHeader>
-          <CardTitle className="text-xl text-slate-100">搜尋結果</CardTitle>
+          <CardTitle className="text-xl text-slate-100">
+            搜尋結果 {totalStocks > 0 && `(共 ${totalStocks} 筆)`}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -448,48 +471,120 @@ export default function StockSearchListPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-slate-700 hover:bg-slate-700/30">
-                      <TableHead className="text-slate-400">
-                        股票代號 (TICKER)
-                      </TableHead>
-                      <TableHead className="text-slate-400">
-                        股票名稱 (NAME)
-                      </TableHead>
-                      <TableHead className="text-slate-400">
-                        行業 (INDUSTRY)
-                      </TableHead>
-                      <TableHead className="text-right text-slate-400">
-                        股價 (PRICE)
+                      <TableHead className="text-slate-400">股票代號</TableHead>
+                      <TableHead className="text-slate-400">公司名稱</TableHead>
+                      <TableHead className="text-slate-400">市場類型</TableHead>
+                      <TableHead className="text-slate-400">證券狀態</TableHead>
+                      <TableHead className="text-slate-400 text-right">
+                        當前股價
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stocks.map((stock) => (
-                      <TableRow
-                        key={stock.stock_id}
-                        className="border-slate-700 hover:bg-slate-700/30"
-                      >
-                        <TableCell>
-                          <Link
-                            href={`/stocks/${stock.symbol}`}
-                            className="font-medium text-blue-400 hover:underline"
-                          >
-                            {stock.symbol}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-slate-100">
-                          {stock.name}
-                        </TableCell>
-                        <TableCell className="text-slate-300">
-                          {stock.industry}
-                        </TableCell>
-                        <TableCell className="text-right font-medium text-green-400">
-                          {" "}
-                          {/* 價格顏色可根據漲跌調整 */}
-                          {getCurrencySymbol(stock.currency)}
-                          {stock.price.toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {stocks.map((stock) => {
+                      const priceChangeInfo = formatPriceChange(
+                        stock.price_change,
+                        stock.change_percentage
+                      );
+
+                      return (
+                        <TableRow
+                          key={stock.stock_id}
+                          className="border-slate-700 hover:bg-slate-700/30"
+                        >
+                          <TableCell>
+                            <Link
+                              href={`/stocks/${stock.stock_id}`}
+                              className="font-medium text-blue-400 hover:underline"
+                            >
+                              {stock.stock_id}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-slate-100">
+                            {stock.company_name}
+                          </TableCell>
+                          <TableCell className="text-slate-300">
+                            {stock.market_type}
+                          </TableCell>
+                          <TableCell className="text-slate-300">
+                            {stock.security_status}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex flex-col items-end space-y-1">
+                              {/* 當前股價 */}
+                              <div className="font-medium text-slate-100">
+                                {formatPrice(
+                                  stock.current_price,
+                                  stock.currency
+                                )}
+                              </div>
+
+                              {/* 漲跌資訊 */}
+                              {priceChangeInfo && (
+                                <div
+                                  className={`flex items-center space-x-1 text-sm ${
+                                    priceChangeInfo.isPositive
+                                      ? "text-green-400"
+                                      : priceChangeInfo.isNegative
+                                      ? "text-red-400"
+                                      : "text-slate-400"
+                                  }`}
+                                >
+                                  {/* 漲跌箭頭 */}
+                                  {priceChangeInfo.isPositive && (
+                                    <svg
+                                      className="w-3 h-3"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 4.414 6.707 7.707a1 1 0 01-1.414 0z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  )}
+                                  {priceChangeInfo.isNegative && (
+                                    <svg
+                                      className="w-3 h-3"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M14.707 12.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 15.586l3.293-3.293a1 1 0 011.414 0z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  )}
+                                  {priceChangeInfo.isFlat && (
+                                    <span className="w-3 h-3 flex items-center justify-center">
+                                      -
+                                    </span>
+                                  )}
+
+                                  {/* 漲跌金額和百分比 */}
+                                  <span>
+                                    {priceChangeInfo.isPositive ? "+" : ""}
+                                    {priceChangeInfo.change} (
+                                    {priceChangeInfo.isPositive ? "+" : ""}
+                                    {priceChangeInfo.percentage}%)
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* 沒有價格資料時顯示 */}
+                              {!priceChangeInfo &&
+                                stock.current_price === null && (
+                                  <div className="text-sm text-slate-500">
+                                    無價格資料
+                                  </div>
+                                )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
