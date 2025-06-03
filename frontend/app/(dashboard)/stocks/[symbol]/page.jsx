@@ -36,111 +36,8 @@ import {
 } from "recharts"; // 用於主要圖表
 import { useToast } from "@/hooks/use-toast"; // 引入 useToast
 
-// 模擬的股票詳細數據 (之後會從 API 獲取)
-const mockStockDetail = {
-  symbol: "AAPL",
-  companyName: "Apple Inc.",
-  exchange: "NASDAQ",
-  currentPrice: 170.34,
-  priceChange: 2.1,
-  percentChange: 1.25,
-  isUp: true,
-  lastUpdated: "Oct 26, 2023, 4:00 PM EDT",
-  marketStatus: "Market closed.",
-  isWatched: false, // 假設初始未關注
-  historicalData: {
-    // 不同時間區間的數據
-    "1D": [
-      { date: "9:30", price: 169.5 },
-      { date: "10:00", price: 170.0 },
-      { date: "12:00", price: 170.5 },
-      { date: "14:00", price: 170.2 },
-      { date: "16:00", price: 170.34 },
-    ],
-    "5D": [
-      { date: "Mon", price: 168.0 },
-      { date: "Tue", price: 169.5 },
-      { date: "Wed", price: 171.0 },
-      { date: "Thu", price: 170.34 },
-      { date: "Fri", price: 170.8 },
-    ],
-    "1M": Array.from({ length: 30 }, (_, i) => ({
-      date: `Day ${i + 1}`,
-      price: 165 + Math.random() * 10,
-    })),
-    "6M": Array.from({ length: 180 }, (_, i) => ({
-      date: `Day ${i + 1}`,
-      price: 150 + Math.random() * 25,
-    })),
-    YTD: Array.from({ length: 200 }, (_, i) => ({
-      date: `Day ${i + 1}`,
-      price: 140 + Math.random() * 35,
-    })),
-    "1Y": Array.from({ length: 250 }, (_, i) => ({
-      date: `Day ${i + 1}`,
-      price: 130 + Math.random() * 45,
-    })),
-    "5Y": Array.from({ length: 300 }, (_, i) => ({
-      date: `Day ${i + 1}`,
-      price: 100 + Math.random() * 80,
-    })),
-    MAX: Array.from({ length: 500 }, (_, i) => ({
-      date: `Day ${i + 1}`,
-      price: 50 + Math.random() * 150,
-    })),
-  },
-  basicInfo: {
-    description:
-      "Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide. It also sells various related services.",
-    sector: "Technology",
-    industry: "Consumer Electronics",
-    marketCap: "2.65T",
-    peRatio: "28.50",
-    dividendYield: "0.55%",
-    employees: "164,000",
-    ceo: "Timothy D. Cook",
-    website: "https://www.apple.com",
-  },
-  financialReports: [
-    {
-      period: "Q3 2023",
-      date: "Jul 2023",
-      revenue: "$81.8B",
-      netIncome: "$19.88B",
-      eps: "$1.26",
-    },
-    {
-      period: "Q2 2023",
-      date: "Apr 2023",
-      revenue: "$94.8B",
-      netIncome: "$24.16B",
-      eps: "$1.52",
-    },
-  ],
-  dividends: [
-    { date: "Aug 17, 2023", amount: "$0.24" },
-    { date: "May 18, 2023", amount: "$0.24" },
-  ],
-  splits: [
-    { date: "Aug 31, 2020", ratio: "4-for-1" },
-    { date: "Jun 09, 2014", ratio: "7-for-1" },
-  ],
-  news: [
-    {
-      title: "Apple Unveils New iPhone Lineup",
-      date: "Sep 12, 2023",
-      source: "Apple Newsroom",
-    },
-    {
-      title: "Analysts Bullish on Apple Stock Ahead of Earnings",
-      date: "Oct 20, 2023",
-      source: "MarketWatch",
-    },
-  ],
-};
-
 // 時間區間按鈕
-const timeRanges = ["1D", "5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
+const timeRanges = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
 
 // 頁籤內容組件
 const TabContentComponent = ({ title, children, icon: Icon }) => (
@@ -165,7 +62,7 @@ function StockDetailPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState("1M"); // 預設時間區間
-  const [isWatched, setIsWatched] = useState(mockStockDetail.isWatched); // 模擬關注狀態
+  const [isWatched, setIsWatched] = useState(false); // 模擬關注狀態
   const [isTradeDialogOpen, setIsTradeDialogOpen] = useState(false); // 模擬交易對話框狀態
   const [tradeDialogAction, setTradeDialogAction] = useState("BUY"); // 模擬交易動作
 
@@ -176,20 +73,26 @@ function StockDetailPageContent() {
       setIsLoading(true);
       setError(null);
       try {
-        // TODO: 替換為真實的 API 呼叫
-        // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stocks/${stockSymbol}`);
-        // if (!response.ok) throw new Error(`Failed to fetch data for ${stockSymbol}`);
-        // const data = await response.json();
-        // setStockData(data);
-        // setIsWatched(data.isWatchedByUser); // API 應該返回用戶是否已關注
+        // 獲取股票詳細資訊
+        const response = await fetch(`/api/stocks/${stockSymbol}`);
+        if (!response.ok) {
+          throw new Error(`無法獲取股票 ${stockSymbol} 的資訊`);
+        }
+        const data = await response.json();
+        setStockData(data);
 
-        // 使用模擬數據
-        if (stockSymbol === mockStockDetail.symbol) {
-          await new Promise((resolve) => setTimeout(resolve, 500)); // 模擬網路延遲
-          setStockData(mockStockDetail);
-          setIsWatched(mockStockDetail.isWatched);
-        } else {
-          throw new Error(`No data found for symbol ${stockSymbol}`);
+        // 檢查是否已關注（需要登入）
+        try {
+          const watchResponse = await fetch(
+            `/api/stocks/${stockSymbol}/watchlist`
+          );
+          if (watchResponse.ok) {
+            const watchData = await watchResponse.json();
+            setIsWatched(watchData.isWatched);
+          }
+        } catch (watchErr) {
+          // 如果未登入或其他錯誤，保持預設狀態
+          console.log("無法檢查關注狀態:", watchErr);
         }
       } catch (err) {
         console.error("Error fetching stock data:", err);
@@ -207,30 +110,40 @@ function StockDetailPageContent() {
     fetchStockData();
   }, [stockSymbol, toast]);
 
+  // 更新關注列表處理函數
   const handleToggleWatchlist = async () => {
-    // TODO: 呼叫 API 更新關注列表狀態
     const newWatchStatus = !isWatched;
-    setIsWatched(newWatchStatus); // 立即更新 UI
-    toast({
-      title: newWatchStatus ? "已加入關注列表" : "已從關注列表移除",
-      description: `${stockSymbol} ${
-        newWatchStatus ? "成功加入您的關注列表。" : "已從您的關注列表移除。"
-      }`,
-    });
-    // try {
-    //   const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/watchlist/${stockSymbol}`, {
-    //     method: newWatchStatus ? 'POST' : 'DELETE',
-    //     // headers: { 'Authorization': `Bearer ${token}` },
-    //   });
-    //   if (!response.ok) {
-    //     // 如果 API 失敗，則回滾 UI 狀態並顯示錯誤
-    //     setIsWatched(!newWatchStatus);
-    //     toast({ variant: "destructive", title: "操作失敗", description: "無法更新關注列表，請稍後再試。" });
-    //   }
-    // } catch (err) {
-    //   setIsWatched(!newWatchStatus);
-    //   toast({ variant: "destructive", title: "操作失敗", description: "網路錯誤，請稍後再試。" });
-    // }
+    const originalStatus = isWatched;
+
+    // 樂觀更新 UI
+    setIsWatched(newWatchStatus);
+
+    try {
+      const method = newWatchStatus ? "POST" : "DELETE";
+      const response = await fetch(`/api/stocks/${stockSymbol}/watchlist`, {
+        method,
+      });
+
+      if (!response.ok) {
+        throw new Error("操作失敗");
+      }
+
+      const data = await response.json();
+      setIsWatched(data.isWatched);
+
+      toast({
+        title: newWatchStatus ? "已加入關注列表" : "已從關注列表移除",
+        description: data.message,
+      });
+    } catch (err) {
+      // 回滾 UI 狀態
+      setIsWatched(originalStatus);
+      toast({
+        variant: "destructive",
+        title: "操作失敗",
+        description: err.message || "無法更新關注列表，請稍後再試。",
+      });
+    }
   };
 
   const handleOpenTradeDialog = (action) => {
