@@ -57,9 +57,10 @@ export default function AddWatchlistItemDialog({
         // 確保 API 返回的 stock_id 是 Prisma Stocks 表中的 stock_id (通常是 tickerSymbol)
         setSearchResults(
           data.map((stock) => ({
-            stock_id: stock.stock_id, // 這是 Prisma Stocks.stock_id
-            symbol: stock.tickerSymbol, // 這是 Prisma Stocks.tickerSymbol
-            name: stock.companyName,
+            stock_id: stock.stock_id,
+            symbol: stock.tickerSymbol || stock.stock_id,
+            name: stock.companyName || stock.company_name,
+            // 不顯示價格資訊，保持介面簡潔
           }))
         );
         // --- 結束替換 ---

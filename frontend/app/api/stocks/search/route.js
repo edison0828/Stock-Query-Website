@@ -1,4 +1,4 @@
-// app/api/stocks/search/route.js (簡化示例)
+// app/api/stocks/search/route.js
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
@@ -14,25 +14,32 @@ export async function GET(request) {
   }
 
   try {
-    const stocks = await prisma.stocks.findMany({
-      where: {
-        OR: [
-          { stock_id: { contains: query } }, // 你的 stock_id 就是 tickerSymbol
-          { company_name: { contains: query } },
-        ],
-      },
-      select: {
-        stock_id: true, // 這就是 tickerSymbol
-        company_name: true,
-        // 你可以根據需要選擇更多欄位
-      },
-      take: 10, // 限制結果數量
-    });
+    // 使用原始 SQL 來實現更精準的搜尋和排序
+    const stocks = await prisma.$queryRaw`
+      SELECT stock_id, company_name,
+        CASE 
+          -- 完全匹配股票代號 (最高優先級)
+          WHEN stock_id = ${query} THEN 1
+          -- 股票代號開頭匹配
+          WHEN stock_id LIKE CONCAT(${query}, '%') THEN 2
+          -- 公司名稱開頭匹配
+          WHEN company_name LIKE CONCAT(${query}, '%') THEN 3
+          -- 股票代號包含
+          WHEN stock_id LIKE CONCAT('%', ${query}, '%') THEN 4
+          -- 公司名稱包含
+          WHEN company_name LIKE CONCAT('%', ${query}, '%') THEN 5
+          ELSE 6
+        END as relevance_score
+      FROM stocks 
+      WHERE stock_id LIKE CONCAT('%', ${query}, '%')
+         OR company_name LIKE CONCAT('%', ${query}, '%')
+      ORDER BY relevance_score ASC, stock_id ASC
+      LIMIT 10
+    `;
 
-    // 為了與前端 AddWatchlistItemDialog 的期望一致，將 stock_id 複製一份到 tickerSymbol
     const formattedStocks = stocks.map((stock) => ({
       stock_id: stock.stock_id,
-      tickerSymbol: stock.stock_id, // 因為前端可能期望 tickerSymbol 屬性
+      tickerSymbol: stock.stock_id,
       companyName: stock.company_name,
     }));
 

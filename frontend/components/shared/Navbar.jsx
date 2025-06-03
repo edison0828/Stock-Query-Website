@@ -84,28 +84,38 @@ export default function Navbar({ user }) {
       setIsLoadingSearch(true);
       setShowSearchResults(true); // 顯示下拉框
       try {
-        // TODO: 呼叫 API 搜尋股票，API 應返回 symbol 和 name
-        // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stocks/search-suggestions?q=${encodeURIComponent(query)}`);
-        // if (!response.ok) throw new Error('Failed to fetch search suggestions');
-        // const data = await response.json(); // e.g., [{ stock_id: 's1', symbol: 'AAPL', name: 'Apple Inc.'}, ...]
-        // setSearchResults(data.slice(0, 7)); // 最多顯示7條建議
+        // 使用實際的 API
+        const response = await fetch(
+          `/api/stocks/search?q=${encodeURIComponent(query)}`
+        );
+        if (!response.ok) throw new Error("Failed to fetch search suggestions");
+        const data = await response.json();
 
-        // 模擬 API
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        const mockResults = [
-          { stock_id: "s1", symbol: "AAPL", name: "Apple Inc." },
-          { stock_id: "s2", symbol: "MSFT", name: "Microsoft Corp." },
-          { stock_id: "s3", symbol: "GOOGL", name: "Alphabet Inc." },
-          { stock_id: "s4", symbol: "TSLA", name: "Tesla, Inc." },
-          { stock_id: "s5", symbol: "AMZN", name: "Amazon.com, Inc." },
-        ]
-          .filter(
-            (stock) =>
-              stock.symbol.toLowerCase().includes(query.toLowerCase()) ||
-              stock.name.toLowerCase().includes(query.toLowerCase())
-          )
-          .slice(0, 7);
-        setSearchResults(mockResults);
+        // 轉換資料格式以符合 Navbar 的期望
+        const formattedResults = data.map((stock) => ({
+          stock_id: stock.stock_id,
+          symbol: stock.tickerSymbol || stock.stock_id, // 使用 tickerSymbol 或 stock_id 作為 symbol
+          name: stock.companyName || stock.company_name, // 使用 companyName 或 company_name 作為 name
+        }));
+
+        setSearchResults(formattedResults.slice(0, 7)); // 最多顯示7條建議
+
+        // // 模擬 API
+        // await new Promise((resolve) => setTimeout(resolve, 300));
+        // const mockResults = [
+        //   { stock_id: "s1", symbol: "AAPL", name: "Apple Inc." },
+        //   { stock_id: "s2", symbol: "MSFT", name: "Microsoft Corp." },
+        //   { stock_id: "s3", symbol: "GOOGL", name: "Alphabet Inc." },
+        //   { stock_id: "s4", symbol: "TSLA", name: "Tesla, Inc." },
+        //   { stock_id: "s5", symbol: "AMZN", name: "Amazon.com, Inc." },
+        // ]
+        //   .filter(
+        //     (stock) =>
+        //       stock.symbol.toLowerCase().includes(query.toLowerCase()) ||
+        //       stock.name.toLowerCase().includes(query.toLowerCase())
+        //   )
+        //   .slice(0, 7);
+        // setSearchResults(mockResults);
       } catch (error) {
         console.error("Error fetching search suggestions:", error);
         // toast({ variant: "destructive", title: "搜尋錯誤", description: "無法獲取搜尋建議。" }); // 可選
