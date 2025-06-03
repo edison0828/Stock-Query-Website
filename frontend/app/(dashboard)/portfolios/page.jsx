@@ -43,50 +43,6 @@ import {
 import CreatePortfolioDialog from "@/components/portfolios/CreatePortfolioDialog"; // << 新建組合的彈窗
 import RenamePortfolioDialog from "@/components/portfolios/RenamePortfolioDialog"; // << 重命名組合的彈窗
 
-// 模擬的投資組合數據 (之後會從 API 獲取)
-const mockInitialPortfolios = [
-  {
-    id: "pf1",
-    name: "積極成長型組合",
-    total_value: 125876.5,
-    currency: "USD",
-    today_pnl: 1234.56,
-    today_pnl_percent: 0.99,
-    is_pnl_up: true,
-    description: "專注於高增長潛力的科技股和新興市場股票。",
-  },
-  {
-    id: "pf2",
-    name: "穩健收益型組合",
-    total_value: 88430.1,
-    currency: "USD",
-    today_pnl: -250.7,
-    today_pnl_percent: -0.28,
-    is_pnl_up: false,
-    description: "以大型藍籌股和固定收益產品為主，追求穩定現金流。",
-  },
-  {
-    id: "pf3",
-    name: "科技股觀察組合",
-    total_value: 0,
-    currency: "USD",
-    today_pnl: 0,
-    today_pnl_percent: 0,
-    is_pnl_up: true,
-    description: "此組合僅用於觀察，未包含實際持倉價值。",
-  },
-  {
-    id: "pf4",
-    name: "退休儲蓄計劃",
-    total_value: 250000.0,
-    currency: "USD",
-    today_pnl: 500.0,
-    today_pnl_percent: 0.2,
-    is_pnl_up: true,
-    description: "長期投資組合，為退休生活做準備。",
-  },
-];
-
 export default function MyPortfoliosPage() {
   const [portfolios, setPortfolios] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -99,14 +55,12 @@ export default function MyPortfoliosPage() {
   const fetchPortfolios = async () => {
     setIsLoading(true);
     try {
-      // TODO: 呼叫 API 獲取用戶的投資組合列表
-      // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/portfolios`);
-      // if (!response.ok) throw new Error('Failed to fetch portfolios');
-      // const data = await response.json();
-      // setPortfolios(data);
-
-      await new Promise((resolve) => setTimeout(resolve, 700));
-      setPortfolios(mockInitialPortfolios);
+      const response = await fetch("/api/portfolios");
+      if (!response.ok) {
+        throw new Error("Failed to fetch portfolios");
+      }
+      const data = await response.json();
+      setPortfolios(data);
     } catch (error) {
       console.error("Error fetching portfolios:", error);
       toast({
@@ -122,44 +76,77 @@ export default function MyPortfoliosPage() {
 
   useEffect(() => {
     fetchPortfolios();
-  }, [toast]); // toast 放入依賴以避免 ESLint 警告，實際可以移除
+  }, []);
 
   const handlePortfolioCreated = (newPortfolio) => {
-    // setPortfolios(prev => [newPortfolio, ...prev]); // 將新組合加到列表頂部
-    fetchPortfolios(); // 或者直接重新獲取整個列表以確保數據一致性
+    fetchPortfolios(); // 重新獲取列表
     setIsCreateDialogOpen(false);
   };
 
-  const handlePortfolioRenamed = (updatedPortfolio) => {
-    // setPortfolios(prev => prev.map(p => p.id === updatedPortfolio.id ? updatedPortfolio : p));
-    fetchPortfolios();
-    setIsRenameDialogOpen(false);
-    setSelectedPortfolio(null);
+  const handlePortfolioRenamed = async (updatedData) => {
+    if (!selectedPortfolio) return;
+
+    try {
+      const response = await fetch(`/api/portfolios/${selectedPortfolio.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to rename portfolio");
+      }
+
+      toast({
+        title: "成功",
+        description: "投資組合已重新命名。",
+      });
+
+      fetchPortfolios();
+      setIsRenameDialogOpen(false);
+      setSelectedPortfolio(null);
+    } catch (error) {
+      console.error("重命名投資組合失敗:", error);
+      toast({
+        variant: "destructive",
+        title: "重新命名失敗",
+        description: error.message,
+      });
+    }
   };
 
   const handleDeletePortfolio = async () => {
     if (!selectedPortfolio) return;
-    // TODO: 呼叫 API 刪除投資組合
-    // try {
-    //   const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/portfolios/${selectedPortfolio.id}`, { method: 'DELETE' });
-    //   if (!response.ok) throw new Error('Failed to delete portfolio');
-    //   setPortfolios(prev => prev.filter(p => p.id !== selectedPortfolio.id));
-    //   toast({ title: "成功", description: `投資組合 "${selectedPortfolio.name}" 已刪除。` });
-    // } catch (error) {
-    //   toast({ variant: "destructive", title: "刪除失敗", description: error.message });
-    // } finally {
-    //   setIsDeleteDialogOpen(false);
-    //   setSelectedPortfolio(null);
-    // }
 
-    await new Promise((resolve) => setTimeout(resolve, 500)); // 模擬 API
-    setPortfolios((prev) => prev.filter((p) => p.id !== selectedPortfolio.id));
-    toast({
-      title: "成功",
-      description: `投資組合 "${selectedPortfolio.name}" 已刪除。`,
-    });
-    setIsDeleteDialogOpen(false);
-    setSelectedPortfolio(null);
+    try {
+      const response = await fetch(`/api/portfolios/${selectedPortfolio.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to delete portfolio");
+      }
+
+      toast({
+        title: "成功",
+        description: `投資組合 "${selectedPortfolio.name}" 已刪除。`,
+      });
+
+      fetchPortfolios();
+      setIsDeleteDialogOpen(false);
+      setSelectedPortfolio(null);
+    } catch (error) {
+      console.error("刪除投資組合失敗:", error);
+      toast({
+        variant: "destructive",
+        title: "刪除失敗",
+        description: error.message,
+      });
+    }
   };
 
   const openRenameDialog = (portfolio) => {

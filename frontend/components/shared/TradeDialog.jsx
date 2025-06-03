@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import {
   Dialog,
   DialogContent,
@@ -84,31 +85,17 @@ export default function TradeDialog({
       const fetchPortfolios = async () => {
         setIsFetchingPortfolios(true);
         try {
-          // TODO: 呼叫 API 獲取用戶的投資組合列表
-          // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/portfolios`);
-          // if (!response.ok) throw new Error('Failed to fetch portfolios');
-          // const data = await response.json();
-          // setPortfolios(data);
-          // if (portfolioId) { // 如果外部傳入了 portfolioId，則設定為預設
-          //   setSelectedPortfolioId(portfolioId.toString());
-          // } else if (data.length > 0) { // 否則，如果列表不為空，選第一個
-          //   setSelectedPortfolioId(data[0].portfolio_id.toString());
-          // } else {
-          //   setSelectedPortfolioId(""); // 清空選擇
-          // }
+          const response = await fetch("/api/portfolios");
+          if (!response.ok) {
+            throw new Error("無法獲取投資組合列表");
+          }
+          const data = await response.json();
+          setPortfolios(data);
 
-          // 模擬數據
-          await new Promise((resolve) => setTimeout(resolve, 300));
-          const mockPortfolios = [
-            { portfolio_id: 1, portfolio_name: "我的主要投資組合" },
-            { portfolio_id: 2, portfolio_name: "科技股觀察" },
-            { portfolio_id: 3, portfolio_name: "長期持有" },
-          ];
-          setPortfolios(mockPortfolios);
           if (portfolioId) {
             setSelectedPortfolioId(portfolioId.toString());
-          } else if (mockPortfolios.length > 0) {
-            setSelectedPortfolioId(mockPortfolios[0].portfolio_id.toString());
+          } else if (data.length > 0) {
+            setSelectedPortfolioId(data[0].portfolio_id.toString());
           } else {
             setSelectedPortfolioId("");
           }
@@ -119,6 +106,7 @@ export default function TradeDialog({
             title: "錯誤",
             description: "無法獲取投資組合列表。",
           });
+          setPortfolios([]);
         } finally {
           setIsFetchingPortfolios(false);
         }
@@ -166,45 +154,62 @@ export default function TradeDialog({
       setIsLoadingSearch(true);
       setShowSearchResults(true);
       try {
-        // TODO: API 呼叫，需要返回 current_price, is_up, change_amount, change_percent
-        // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/stocks/search?q=${encodeURIComponent(query)}&include_price=true`);
-        // const data = await response.json();
-        // setSearchResults(data);
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        const mockResults = [
-          {
-            stock_id: "AAPL_stock_id",
-            symbol: "AAPL",
-            name: "Apple Inc.",
-            current_price: 170.34,
-            is_up: true,
-            change_amount: 2.1,
-            change_percent: 1.25,
-          },
-          {
-            stock_id: "TSLA_stock_id",
-            symbol: "TSLA",
-            name: "Tesla, Inc.",
-            current_price: 750.0,
-            is_up: false,
-            change_amount: -5.0,
-            change_percent: -0.66,
-          },
-          {
-            stock_id: "MSFT_stock_id",
-            symbol: "MSFT",
-            name: "Microsoft Corp.",
-            current_price: 290.75,
-            is_up: true,
-            change_amount: 3.5,
-            change_percent: 1.22,
-          },
-        ].filter(
-          (stock) =>
-            stock.symbol.toLowerCase().includes(query.toLowerCase()) ||
-            stock.name.toLowerCase().includes(query.toLowerCase())
+        // 使用現有的股票搜尋 API
+        const response = await fetch(
+          `/api/stocks/search?q=${encodeURIComponent(query)}`
         );
-        setSearchResults(mockResults);
+        if (!response.ok) {
+          throw new Error("搜尋請求失敗");
+        }
+        const searchData = await response.json();
+
+        // 為每個搜尋結果獲取價格資訊
+        const resultsWithPrice = await Promise.all(
+          searchData.slice(0, 5).map(async (stock) => {
+            // 限制前5個結果
+            try {
+              const priceResponse = await fetch(
+                `/api/stocks/${stock.stock_id}`
+              );
+              if (priceResponse.ok) {
+                const stockDetail = await priceResponse.json();
+                return {
+                  stock_id: stock.stock_id,
+                  symbol: stock.stock_id, // 使用 stock_id 作為 symbol
+                  name: stock.company_name,
+                  current_price: stockDetail.currentPrice || 0,
+                  is_up: stockDetail.isUp || false,
+                  change_amount: stockDetail.priceChange || 0,
+                  change_percent: stockDetail.percentChange || 0,
+                };
+              } else {
+                // 如果無法獲取價格，返回基本資訊
+                return {
+                  stock_id: stock.stock_id,
+                  symbol: stock.stock_id,
+                  name: stock.company_name,
+                  current_price: 0,
+                  is_up: false,
+                  change_amount: 0,
+                  change_percent: 0,
+                };
+              }
+            } catch (error) {
+              console.error(`獲取 ${stock.stock_id} 價格失敗:`, error);
+              return {
+                stock_id: stock.stock_id,
+                symbol: stock.stock_id,
+                name: stock.company_name,
+                current_price: 0,
+                is_up: false,
+                change_amount: 0,
+                change_percent: 0,
+              };
+            }
+          })
+        );
+
+        setSearchResults(resultsWithPrice);
       } catch (error) {
         setSearchResults([]);
         toast({
@@ -279,11 +284,29 @@ export default function TradeDialog({
       price_per_share: effectivePrice,
     });
     try {
-      // const response = await fetch(...)
-      // if (!response.ok) throw new Error(...)
-      // const result = await response.json();
+      const transactionData = {
+        stock_id: selectedStock.stock_id,
+        portfolio_id: parseInt(selectedPortfolioId, 10),
+        transaction_type: actionType,
+        quantity: numQuantity,
+        price_per_share: effectivePrice,
+      };
 
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+      const response = await fetch("/api/transactions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(transactionData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "交易提交失敗");
+      }
+
+      const result = await response.json();
+
       toast({
         title: "模擬交易成功",
         description: `${
@@ -292,11 +315,12 @@ export default function TradeDialog({
       });
 
       if (onTradeSubmitSuccess) {
-        onTradeSubmitSuccess(); // 這個回呼應該處理關閉彈窗和刷新數據
+        onTradeSubmitSuccess();
       } else {
-        onClose(); // 如果沒有回呼，自己關閉
+        onClose();
       }
     } catch (err) {
+      console.error("交易提交失敗:", err);
       toast({
         variant: "destructive",
         title: "交易失敗",
@@ -512,7 +536,7 @@ export default function TradeDialog({
                           value={p.portfolio_id.toString()}
                           className="hover:bg-slate-700 focus:bg-slate-700"
                         >
-                          {p.portfolio_name}
+                          {p.name || p.portfolio_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
