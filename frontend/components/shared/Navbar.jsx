@@ -99,23 +99,6 @@ export default function Navbar({ user }) {
         }));
 
         setSearchResults(formattedResults.slice(0, 7)); // 最多顯示7條建議
-
-        // // 模擬 API
-        // await new Promise((resolve) => setTimeout(resolve, 300));
-        // const mockResults = [
-        //   { stock_id: "s1", symbol: "AAPL", name: "Apple Inc." },
-        //   { stock_id: "s2", symbol: "MSFT", name: "Microsoft Corp." },
-        //   { stock_id: "s3", symbol: "GOOGL", name: "Alphabet Inc." },
-        //   { stock_id: "s4", symbol: "TSLA", name: "Tesla, Inc." },
-        //   { stock_id: "s5", symbol: "AMZN", name: "Amazon.com, Inc." },
-        // ]
-        //   .filter(
-        //     (stock) =>
-        //       stock.symbol.toLowerCase().includes(query.toLowerCase()) ||
-        //       stock.name.toLowerCase().includes(query.toLowerCase())
-        //   )
-        //   .slice(0, 7);
-        // setSearchResults(mockResults);
       } catch (error) {
         console.error("Error fetching search suggestions:", error);
         // toast({ variant: "destructive", title: "搜尋錯誤", description: "無法獲取搜尋建議。" }); // 可選
@@ -263,33 +246,37 @@ export default function Navbar({ user }) {
             className="w-full rounded-lg bg-slate-700/80 pl-10 pr-4 py-2 text-sm border-slate-600 placeholder:text-slate-400 text-slate-100 focus:bg-slate-700 focus:border-blue-500"
           />
           {showSearchResults && (
-            <ScrollArea className="absolute z-20 w-full  mt-1 max-h-80 bg-slate-700 border border-slate-600 rounded-md shadow-lg">
-              {isLoadingSearch && (
-                <div className="p-3 text-center text-slate-400 text-sm">
-                  <Spinner className="inline animate-spin h-4 w-4 mr-2" />
-                  搜尋中...
-                </div>
-              )}
-              {!isLoadingSearch &&
-                searchResults.length > 0 &&
-                searchResults.map((stock) => (
-                  <div
-                    key={stock.stock_id || stock.symbol}
-                    onClick={() => handleSelectStock(stock.symbol)}
-                    className="px-3 py-2.5 hover:bg-slate-600 cursor-pointer border-b border-slate-600 last:border-b-0"
-                  >
-                    <p className="font-medium text-slate-100">{stock.symbol}</p>
-                    <p className="text-xs text-slate-400">{stock.name}</p>
-                  </div>
-                ))}
-              {!isLoadingSearch &&
-                searchResults.length === 0 &&
-                searchQuery.length >= 2 && (
+            <div className="flex">
+              <ScrollArea className="absolute z-20 w-full  mt-1 max-h-80 bg-slate-700 border border-slate-600 rounded-md shadow-lg">
+                {isLoadingSearch && (
                   <div className="p-3 text-center text-slate-400 text-sm">
-                    找不到符合 "{searchQuery}" 的建議。
+                    <Spinner className="inline animate-spin h-4 w-4 mr-2" />
+                    搜尋中...
                   </div>
                 )}
-            </ScrollArea>
+                {!isLoadingSearch &&
+                  searchResults.length > 0 &&
+                  searchResults.map((stock) => (
+                    <div
+                      key={stock.stock_id || stock.symbol}
+                      onClick={() => handleSelectStock(stock.symbol)}
+                      className="px-3 py-2.5 hover:bg-slate-600 cursor-pointer border-b border-slate-600 last:border-b-0"
+                    >
+                      <p className="font-medium text-slate-100">
+                        {stock.symbol}
+                      </p>
+                      <p className="text-xs text-slate-400">{stock.name}</p>
+                    </div>
+                  ))}
+                {!isLoadingSearch &&
+                  searchResults.length === 0 &&
+                  searchQuery.length >= 2 && (
+                    <div className="p-3 text-center text-slate-400 text-sm">
+                      找不到符合 "{searchQuery}" 的建議。
+                    </div>
+                  )}
+              </ScrollArea>
+            </div>
           )}
         </form>
       </div>

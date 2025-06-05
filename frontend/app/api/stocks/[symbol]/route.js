@@ -154,7 +154,7 @@ async function getHistoricalPriceData(stockSymbol) {
   const historicalData = {};
 
   try {
-    // 首先獲取該股票的最新日期
+    // 獲取最新日期
     const latestRecord = await prisma.historicalprices.findFirst({
       where: { stock_id: stockSymbol },
       orderBy: { date: "desc" },
@@ -162,20 +162,31 @@ async function getHistoricalPriceData(stockSymbol) {
     });
 
     if (!latestRecord) {
-      console.log(`股票 ${stockSymbol} 沒有歷史數據`);
-      // 返回空數據
       const ranges = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
       ranges.forEach((range) => (historicalData[range] = []));
       return historicalData;
     }
 
     const latestDate = new Date(latestRecord.date);
-    console.log(
-      `股票 ${stockSymbol} 的最新數據日期: ${
-        latestDate.toISOString().split("T")[0]
-      }`
-    );
 
+    // 計算最長的時間範圍（5年或 MAX）
+    const fiveYearsAgo = new Date(latestDate);
+    fiveYearsAgo.setDate(fiveYearsAgo.getDate() - 1825);
+
+    // 一次性獲取所有需要的歷史數據
+    const allPrices = await prisma.historicalprices.findMany({
+      where: {
+        stock_id: stockSymbol,
+        date: { gte: fiveYearsAgo }, // 或者不設限制如果要 MAX
+      },
+      orderBy: { date: "asc" },
+      select: {
+        date: true,
+        close_price: true,
+      },
+    });
+
+    // 在記憶體中篩選不同時間範圍的數據
     const timeRanges = {
       "5D": 5,
       "1M": 30,
@@ -187,68 +198,28 @@ async function getHistoricalPriceData(stockSymbol) {
     };
 
     for (const [range, days] of Object.entries(timeRanges)) {
-      let whereClause = { stock_id: stockSymbol };
+      let filteredPrices = allPrices;
 
       if (days) {
-        // 從最新數據日期往前推算，而不是從今天
         const startDate = new Date(latestDate);
         startDate.setDate(startDate.getDate() - days);
-        whereClause.date = { gte: startDate };
-
-        console.log(
-          `${range}: 從 ${startDate.toISOString().split("T")[0]} 到 ${
-            latestDate.toISOString().split("T")[0]
-          }`
+        filteredPrices = allPrices.filter(
+          (price) => new Date(price.date) >= startDate
         );
       } else if (range === "YTD") {
-        // 年初至今：從最新數據年份的 1 月 1 日開始
         const startOfYear = new Date(latestDate.getFullYear(), 0, 1);
-        whereClause.date = { gte: startOfYear };
-
-        console.log(
-          `${range}: 從 ${startOfYear.toISOString().split("T")[0]} 到 ${
-            latestDate.toISOString().split("T")[0]
-          }`
+        filteredPrices = allPrices.filter(
+          (price) => new Date(price.date) >= startOfYear
         );
       }
 
-      try {
-        const prices = await prisma.historicalprices.findMany({
-          where: whereClause,
-          orderBy: { date: "asc" },
-          select: {
-            date: true,
-            close_price: true,
-          },
-        });
-
-        console.log(`${range}: 查詢到 ${prices.length} 筆數據`);
-
-        historicalData[range] = prices.map((price) => ({
-          date: formatDateForChart(price.date, range),
-          price: price.close_price ? Number(price.close_price) : 0,
-        }));
-
-        // 調試 5D 數據
-        if (range === "5D") {
-          console.log(
-            "5D 原始數據:",
-            prices.slice(0, 3).map((p) => ({
-              date: p.date.toISOString().split("T")[0],
-              close_price: Number(p.close_price),
-            }))
-          );
-
-          console.log("5D 格式化後數據:", historicalData[range].slice(0, 3));
-        }
-      } catch (error) {
-        console.error(`獲取 ${range} 數據時發生錯誤:`, error);
-        historicalData[range] = [];
-      }
+      historicalData[range] = filteredPrices.map((price) => ({
+        date: formatDateForChart(price.date, range),
+        price: price.close_price ? Number(price.close_price) : 0,
+      }));
     }
   } catch (error) {
     console.error("獲取歷史數據時發生錯誤:", error);
-    // 返回空數據
     const ranges = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
     ranges.forEach((range) => (historicalData[range] = []));
   }
@@ -360,6 +331,10 @@ function formatDateForChart(date, range) {
     case "6M":
       return d.toLocaleDateString("zh-TW", { month: "short", day: "numeric" });
     default:
-      return d.toLocaleDateString("zh-TW", { year: "2-digit", month: "short" });
+      return d.toLocaleDateString("zh-TW", {
+        // year: "2-digit",
+        month: "short",
+        day: "numeric",
+      });
   }
 }

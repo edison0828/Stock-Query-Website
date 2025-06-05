@@ -145,7 +145,6 @@ export default function TradeDialog({
         selectedStock &&
         `${selectedStock.symbol} - ${selectedStock.name}` === query
       ) {
-        // 如果搜尋框內容與已選股票一致，則不重新搜尋
         setShowSearchResults(false);
         setIsLoadingSearch(false);
         return;
@@ -154,62 +153,15 @@ export default function TradeDialog({
       setIsLoadingSearch(true);
       setShowSearchResults(true);
       try {
-        // 使用現有的股票搜尋 API
+        // 使用新的優化搜索 API
         const response = await fetch(
-          `/api/stocks/search?q=${encodeURIComponent(query)}`
+          `/api/stocks/search-for-trade?q=${encodeURIComponent(query)}`
         );
         if (!response.ok) {
           throw new Error("搜尋請求失敗");
         }
         const searchData = await response.json();
-
-        // 為每個搜尋結果獲取價格資訊
-        const resultsWithPrice = await Promise.all(
-          searchData.slice(0, 5).map(async (stock) => {
-            // 限制前5個結果
-            try {
-              const priceResponse = await fetch(
-                `/api/stocks/${stock.stock_id}`
-              );
-              if (priceResponse.ok) {
-                const stockDetail = await priceResponse.json();
-                return {
-                  stock_id: stock.stock_id,
-                  symbol: stock.stock_id, // 使用 stock_id 作為 symbol
-                  name: stock.company_name,
-                  current_price: stockDetail.currentPrice || 0,
-                  is_up: stockDetail.isUp || false,
-                  change_amount: stockDetail.priceChange || 0,
-                  change_percent: stockDetail.percentChange || 0,
-                };
-              } else {
-                // 如果無法獲取價格，返回基本資訊
-                return {
-                  stock_id: stock.stock_id,
-                  symbol: stock.stock_id,
-                  name: stock.company_name,
-                  current_price: 0,
-                  is_up: false,
-                  change_amount: 0,
-                  change_percent: 0,
-                };
-              }
-            } catch (error) {
-              console.error(`獲取 ${stock.stock_id} 價格失敗:`, error);
-              return {
-                stock_id: stock.stock_id,
-                symbol: stock.stock_id,
-                name: stock.company_name,
-                current_price: 0,
-                is_up: false,
-                change_amount: 0,
-                change_percent: 0,
-              };
-            }
-          })
-        );
-
-        setSearchResults(resultsWithPrice);
+        setSearchResults(searchData); // 直接使用，不需要額外處理
       } catch (error) {
         setSearchResults([]);
         toast({
@@ -221,7 +173,7 @@ export default function TradeDialog({
         setIsLoadingSearch(false);
       }
     }, 300),
-    [toast, selectedStock] // 加入 selectedStock 到依賴
+    [toast, selectedStock]
   );
 
   useEffect(() => {
@@ -423,37 +375,39 @@ export default function TradeDialog({
               />
             </div>
             {showSearchResults && (
-              <ScrollArea className="absolute z-10 w-full mt-1 max-h-40 bg-slate-700 border border-slate-600 rounded-md shadow-lg">
-                {isLoadingSearch && (
-                  <div className="p-2 text-center text-slate-400">
-                    <Spinner className="inline animate-spin h-4 w-4 mr-2" />
-                    搜尋中...
-                  </div>
-                )}
-                {!isLoadingSearch &&
-                  searchResults.length > 0 &&
-                  searchResults.map((stock) => (
-                    <div
-                      key={stock.stock_id}
-                      onClick={() => handleSelectStock(stock)}
-                      className="p-2 hover:bg-slate-600 cursor-pointer border-b border-slate-600 last:border-b-0"
-                    >
-                      <p className="font-medium text-slate-100">
-                        {stock.symbol} - {stock.name}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        價格: ${(stock.current_price || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  ))}
-                {!isLoadingSearch &&
-                  searchResults.length === 0 &&
-                  searchQuery.length >= 1 && (
+              <div className="flex">
+                <ScrollArea className="absolute z-10 w-full mt-1 max-h-40 bg-slate-700 border border-slate-600 rounded-md shadow-lg">
+                  {isLoadingSearch && (
                     <div className="p-2 text-center text-slate-400">
-                      找不到結果。
+                      <Spinner className="inline animate-spin h-4 w-4 mr-2" />
+                      搜尋中...
                     </div>
                   )}
-              </ScrollArea>
+                  {!isLoadingSearch &&
+                    searchResults.length > 0 &&
+                    searchResults.map((stock) => (
+                      <div
+                        key={stock.stock_id}
+                        onClick={() => handleSelectStock(stock)}
+                        className="p-2 hover:bg-slate-600 cursor-pointer border-b border-slate-600 last:border-b-0"
+                      >
+                        <p className="font-medium text-slate-100">
+                          {stock.symbol} - {stock.name}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          價格: ${(stock.current_price || 0).toFixed(2)}
+                        </p>
+                      </div>
+                    ))}
+                  {!isLoadingSearch &&
+                    searchResults.length === 0 &&
+                    searchQuery.length >= 1 && (
+                      <div className="p-2 text-center text-slate-400">
+                        找不到結果。
+                      </div>
+                    )}
+                </ScrollArea>
+              </div>
             )}
           </div>
           {selectedStock && (

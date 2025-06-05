@@ -1,6 +1,7 @@
-// app/api/stocks/search/route.js
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { PrismaClient } from "@/lib/generated/prisma";
+
+const prisma = new PrismaClient();
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -14,24 +15,24 @@ export async function GET(request) {
   }
 
   try {
-    // 使用原始 SQL 來實現更精準的搜尋和排序
+    console.log("搜尋查詢:", query);
+
+    // 簡化為單一查詢，包含所有匹配模式
     const stocks = await prisma.$queryRaw`
-      SELECT stock_id, company_name,
+      SELECT DISTINCT stock_id, company_name,
         CASE 
-          -- 完全匹配股票代號 (最高優先級)
           WHEN stock_id = ${query} THEN 1
-          -- 股票代號開頭匹配
           WHEN stock_id LIKE CONCAT(${query}, '%') THEN 2
-          -- 公司名稱開頭匹配
           WHEN company_name LIKE CONCAT(${query}, '%') THEN 3
-          -- 股票代號包含
           WHEN stock_id LIKE CONCAT('%', ${query}, '%') THEN 4
-          -- 公司名稱包含
           WHEN company_name LIKE CONCAT('%', ${query}, '%') THEN 5
           ELSE 6
         END as relevance_score
       FROM stocks 
-      WHERE stock_id LIKE CONCAT('%', ${query}, '%')
+      WHERE stock_id = ${query}
+         OR stock_id LIKE CONCAT(${query}, '%')
+         OR company_name LIKE CONCAT(${query}, '%')
+         OR stock_id LIKE CONCAT('%', ${query}, '%')
          OR company_name LIKE CONCAT('%', ${query}, '%')
       ORDER BY relevance_score ASC, stock_id ASC
       LIMIT 10
@@ -43,6 +44,7 @@ export async function GET(request) {
       companyName: stock.company_name,
     }));
 
+    console.log("搜尋結果:", formattedStocks);
     return NextResponse.json(formattedStocks, { status: 200 });
   } catch (error) {
     console.error("股票搜尋失敗:", error);
