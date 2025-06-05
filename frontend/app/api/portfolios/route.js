@@ -13,6 +13,10 @@ export async function GET(request) {
   try {
     const userIdAsBigInt = BigInt(session.user.id);
 
+    // 檢查是否要求摘要資訊
+    const url = new URL(request.url);
+    const includeSummary = url.searchParams.get("summary") === "true";
+
     // 獲取投資組合和計算總價值
     const portfolios = await prisma.portfolios.findMany({
       where: {
@@ -40,6 +44,7 @@ export async function GET(request) {
       portfolios.map(async (portfolio) => {
         let totalValue = 0;
         let todayPnl = 0;
+        let totalCost = 0; // 加入總成本計算
         let currency = "TWD"; // 預設貨幣
 
         // 計算持倉價值
@@ -83,10 +88,7 @@ export async function GET(request) {
                 const currentPrice = Number(latestPrice.close_price);
                 const currentValue = holding.quantity * currentPrice;
                 totalValue += currentValue;
-
-                // 簡化的今日損益計算（實際應該用昨日收盤價）
-                const costValue = holding.totalCost;
-                todayPnl += currentValue - costValue;
+                totalCost += holding.totalCost;
               }
             } catch (error) {
               console.error(`獲取 ${stockId} 價格失敗:`, error);
@@ -94,20 +96,24 @@ export async function GET(request) {
           }
         }
 
+        // 計算正確的損益（當前價值 - 成本）
+        todayPnl = totalValue - totalCost;
+
         // 設定主要貨幣
         if (portfolio.transactions.length > 0) {
           currency = portfolio.transactions[0].currency;
         }
 
         const todayPnlPercent =
-          totalValue > 0 ? (todayPnl / totalValue) * 100 : 0;
+          totalCost > 0 ? (todayPnl / totalCost) * 100 : 0;
 
         return {
-          id: `pf${Number(portfolio.portfolio_id)}`, // 保持與前端一致的格式
+          id: `pf${Number(portfolio.portfolio_id)}`,
           portfolio_id: Number(portfolio.portfolio_id),
           name: portfolio.portfolio_name,
           description: portfolio.description,
           total_value: totalValue,
+          total_cost: totalCost, // 加入總成本
           currency: currency,
           today_pnl: todayPnl,
           today_pnl_percent: todayPnlPercent,
@@ -116,6 +122,40 @@ export async function GET(request) {
         };
       })
     );
+
+    // 如果要求摘要資訊，計算所有投資組合的總和
+    if (includeSummary) {
+      const summary = portfoliosWithValue.reduce(
+        (acc, portfolio) => {
+          acc.total_portfolio_value += portfolio.total_value;
+          acc.total_cost_basis += portfolio.total_cost;
+          acc.total_today_pnl += portfolio.today_pnl;
+          return acc;
+        },
+        {
+          total_portfolio_value: 0,
+          total_cost_basis: 0,
+          total_today_pnl: 0,
+        }
+      );
+
+      // 計算總損益百分比
+      summary.total_today_pnl_percent =
+        summary.total_cost_basis > 0
+          ? (summary.total_today_pnl / summary.total_cost_basis) * 100
+          : 0;
+
+      summary.is_total_pnl_up = summary.total_today_pnl >= 0;
+      summary.portfolio_count = portfoliosWithValue.length;
+
+      return NextResponse.json(
+        {
+          portfolios: portfoliosWithValue,
+          summary: summary,
+        },
+        { status: 200 }
+      );
+    }
 
     return NextResponse.json(portfoliosWithValue, { status: 200 });
   } catch (error) {

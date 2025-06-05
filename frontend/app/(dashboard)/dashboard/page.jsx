@@ -78,6 +78,9 @@ export default function DashboardPage() {
   // 新增狀態管理
   const [watchlistSummary, setWatchlistSummary] = useState([]);
   const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(true);
+  // 新增投資組合狀態
+  const [portfolioSummary, setPortfolioSummary] = useState(null);
+  const [isLoadingPortfolio, setIsLoadingPortfolio] = useState(true);
   const { toast } = useToast();
 
   // Session handling
@@ -164,12 +167,39 @@ export default function DashboardPage() {
     }));
   };
 
+  // 獲取投資組合摘要的函數
+  const fetchPortfolioSummary = useCallback(async () => {
+    if (!session?.user) return;
+
+    setIsLoadingPortfolio(true);
+    try {
+      const response = await fetch("/api/portfolios?summary=true");
+      if (!response.ok) {
+        throw new Error("無法獲取投資組合摘要");
+      }
+
+      const data = await response.json();
+      setPortfolioSummary(data.summary);
+    } catch (error) {
+      console.error("Error fetching portfolio summary:", error);
+      toast({
+        variant: "destructive",
+        title: "載入錯誤",
+        description: "無法載入投資組合摘要",
+      });
+      setPortfolioSummary(null);
+    } finally {
+      setIsLoadingPortfolio(false);
+    }
+  }, [session, toast]);
+
   // 當 session 可用時獲取數據
   useEffect(() => {
     if (session?.user) {
       fetchWatchlistSummary();
+      fetchPortfolioSummary(); // 加入這行
     }
-  }, [session, fetchWatchlistSummary]);
+  }, [session, fetchWatchlistSummary, fetchPortfolioSummary]);
 
   // 1. 處理載入狀態
   if (status === "loading") {
@@ -197,6 +227,22 @@ export default function DashboardPage() {
   // 你可以在這裡使用 session.user 的信息，例如：
   // const userName = session.user.name;
   // const userRole = session.user.role;
+  // 格式化價格顯示的輔助函數
+  const formatCurrency = (amount) => {
+    if (amount === null || amount === undefined) return "N/A";
+    return new Intl.NumberFormat("zh-TW", {
+      style: "currency",
+      currency: "TWD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatChangeAmount = (amount, isUp) => {
+    if (amount === null || amount === undefined) return "N/A";
+    const sign = isUp ? "+" : "";
+    return `${sign}${formatCurrency(amount)}`;
+  };
   return (
     <div className="grid gap-6 md:gap-8">
       {/* 可以考慮在這裡顯示用戶名等 */}
@@ -300,17 +346,53 @@ export default function DashboardPage() {
             </Button>
           </CardHeader>
           <CardContent className="flex-grow">
-            <div className="text-xs text-slate-400">Total Portfolio Value</div>
-            <div className="text-3xl font-bold text-slate-50">$125,876.50</div>
-            <div className="mt-3 text-xs text-slate-400">Today's P&L</div>
-            <div className="flex items-center text-lg font-semibold text-green-400">
-              <ArrowUpRight className="h-5 w-5 mr-1" />
-              +$1,234.56 (+0.99%)
-            </div>
-            <div className="mt-4 text-xs text-slate-400">
-              Number of Portfolios Managed
-            </div>
-            <div className="text-2xl font-bold text-slate-100">3</div>
+            {isLoadingPortfolio ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="text-slate-400">載入投資組合中...</div>
+              </div>
+            ) : portfolioSummary ? (
+              <>
+                <div className="text-xs text-slate-400">
+                  Total Portfolio Value
+                </div>
+                <div className="text-3xl font-bold text-slate-50">
+                  {formatCurrency(portfolioSummary.total_portfolio_value)}
+                </div>
+                <div className="mt-3 text-xs text-slate-400">Today's P&L</div>
+                <div
+                  className={`flex items-center text-lg font-semibold ${
+                    portfolioSummary.is_total_pnl_up
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {portfolioSummary.is_total_pnl_up ? (
+                    <ArrowUpRight className="h-5 w-5 mr-1" />
+                  ) : (
+                    <ArrowDownRight className="h-5 w-5 mr-1" />
+                  )}
+                  {formatChangeAmount(
+                    portfolioSummary.total_today_pnl,
+                    portfolioSummary.is_total_pnl_up
+                  )}
+                  ({portfolioSummary.is_total_pnl_up ? "+" : ""}
+                  {portfolioSummary.total_today_pnl_percent.toFixed(2)}%)
+                </div>
+                <div className="mt-4 text-xs text-slate-400">
+                  Number of Portfolios Managed
+                </div>
+                <div className="text-2xl font-bold text-slate-100">
+                  {portfolioSummary.portfolio_count}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-slate-400 mb-4">尚未建立投資組合</p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/portfolios">建立投資組合</Link>
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
