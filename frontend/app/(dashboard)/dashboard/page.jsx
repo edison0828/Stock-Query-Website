@@ -2,6 +2,8 @@
 "use client"; // 因為迷你圖表等可能需要客戶端 JS
 
 import Link from "next/link";
+import { useState, useEffect, useCallback } from "react";
+import { useToast } from "@/hooks/use-toast";
 import {
   Card,
   CardHeader,
@@ -39,83 +41,6 @@ import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation"; // For App Router
 
 // 模擬數據 (之後會從 API 獲取)
-const mockWatchlist = [
-  {
-    ticker: "AAPL",
-    name: "Apple Inc.",
-    price: "$170.34",
-    change: "+$2.10 (+1.25%)",
-    isUp: true,
-    trendData: [
-      { uv: 10 },
-      { uv: 15 },
-      { uv: 13 },
-      { uv: 17 },
-      { uv: 20 },
-      { uv: 22 },
-    ],
-  },
-  {
-    ticker: "2330",
-    name: "台積電",
-    price: "NT$600.00",
-    change: "-$5.00 (-0.83%)",
-    isUp: false,
-    trendData: [
-      { uv: 30 },
-      { uv: 25 },
-      { uv: 28 },
-      { uv: 22 },
-      { uv: 20 },
-      { uv: 18 },
-    ],
-  },
-  {
-    ticker: "MSFT",
-    name: "Microsoft Corp.",
-    price: "$290.75",
-    change: "+$3.50 (+1.22%)",
-    isUp: true,
-    trendData: [
-      { uv: 5 },
-      { uv: 7 },
-      { uv: 6 },
-      { uv: 9 },
-      { uv: 12 },
-      { uv: 15 },
-    ],
-  },
-  {
-    ticker: "NVDA",
-    name: "NVIDIA Corp.",
-    price: "$220.15",
-    change: "-$1.10 (-0.49%)",
-    isUp: false,
-    trendData: [
-      { uv: 40 },
-      { uv: 35 },
-      { uv: 33 },
-      { uv: 30 },
-      { uv: 28 },
-      { uv: 25 },
-    ],
-  },
-  {
-    ticker: "AMZN",
-    name: "Amazon.com Inc.",
-    price: "$115.60",
-    change: "+$0.80 (+0.70%)",
-    isUp: true,
-    trendData: [
-      { uv: 12 },
-      { uv: 10 },
-      { uv: 14 },
-      { uv: 16 },
-      { uv: 15 },
-      { uv: 18 },
-    ],
-  },
-];
 
 const mockMarketOverview = [
   { name: "TAIEX", value: "16,500.75", change: "+120.50 (+0.73%)", isUp: true },
@@ -150,14 +75,101 @@ const MiniTrendChart = ({ data, isUp }) => (
 );
 
 export default function DashboardPage() {
-  // --- Session Handling ---
+  // 新增狀態管理
+  const [watchlistSummary, setWatchlistSummary] = useState([]);
+  const [isLoadingWatchlist, setIsLoadingWatchlist] = useState(true);
+  const { toast } = useToast();
+
+  // Session handling
   const { data: session, status } = useSession({
-    required: true, // 如果未認證，會自動觸發 onUnauthenticated 或跳轉到 signIn page
+    required: true,
     onUnauthenticated() {
-      // 當 required: true 且檢測到用戶未認證時執行的回呼
-      redirect("/login?callbackUrl=/dashboard"); // 明確指定 callbackUrl
+      redirect("/login?callbackUrl=/dashboard");
     },
   });
+
+  // 獲取關注列表摘要的函數
+  const fetchWatchlistSummary = useCallback(async () => {
+    if (!session?.user) return;
+
+    setIsLoadingWatchlist(true);
+    try {
+      const response = await fetch("/api/watchlist");
+      if (!response.ok) {
+        throw new Error("無法獲取關注列表");
+      }
+
+      const data = await response.json();
+
+      // 只取前5筆作為摘要顯示，並生成趨勢圖數據
+      const formattedData = data.slice(0, 5).map((item) => ({
+        ticker: item.symbol,
+        name: item.name,
+        price: formatPrice(item.current_price, item.currency),
+        change: formatChange(
+          item.change_amount,
+          item.change_percent,
+          item.is_up
+        ),
+        isUp: item.is_up,
+        // 使用真實趨勢數據，如果沒有則回退到模擬數據
+        trendData:
+          item.trend_data && item.trend_data.length >= 2
+            ? item.trend_data
+            : generateTrendData(item.is_up),
+      }));
+
+      setWatchlistSummary(formattedData);
+    } catch (error) {
+      console.error("Error fetching watchlist summary:", error);
+      toast({
+        variant: "destructive",
+        title: "載入錯誤",
+        description: "無法載入關注列表摘要",
+      });
+      setWatchlistSummary([]);
+    } finally {
+      setIsLoadingWatchlist(false);
+    }
+  }, [session, toast]);
+
+  // 格式化價格顯示
+  const formatPrice = (price, currency) => {
+    if (price === null || price === undefined || price === 0) return "N/A";
+    const symbol = currency === "USD" ? "$" : currency === "TWD" ? "NT$" : "";
+    return `${symbol}${price.toFixed(2)}`;
+  };
+
+  // 格式化漲跌幅顯示
+  const formatChange = (changeAmount, changePercent, isUp) => {
+    if (changeAmount === null || changePercent === null || changeAmount === 0)
+      return "N/A";
+    const sign = isUp ? "+" : "";
+    return `${sign}${changeAmount.toFixed(2)} (${sign}${changePercent.toFixed(
+      2
+    )}%)`;
+  };
+
+  // 根據漲跌生成趨勢數據
+  const generateTrendData = (isUp) => {
+    const baseValue = 15;
+    const variation = 5;
+    const trend = isUp ? 1 : -1;
+
+    return Array.from({ length: 6 }, (_, index) => ({
+      uv:
+        baseValue +
+        index * trend * 2 +
+        (Math.random() * variation - variation / 2),
+    }));
+  };
+
+  // 當 session 可用時獲取數據
+  useEffect(() => {
+    if (session?.user) {
+      fetchWatchlistSummary();
+    }
+  }, [session, fetchWatchlistSummary]);
 
   // 1. 處理載入狀態
   if (status === "loading") {
@@ -206,54 +218,71 @@ export default function DashboardPage() {
             </Button>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow className="border-slate-700 hover:bg-slate-700/30">
-                  <TableHead className="text-slate-400">TICKER/NAME</TableHead>
-                  <TableHead className="text-slate-400">PRICE</TableHead>
-                  <TableHead className="text-slate-400">CHANGE</TableHead>
-                  <TableHead className="text-slate-400 w-[100px]">
-                    1-DAY TREND
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockWatchlist.map((stock) => (
-                  <TableRow
-                    key={stock.ticker}
-                    className="border-slate-700 hover:bg-slate-700/30"
-                  >
-                    <TableCell>
-                      <Link
-                        href={`/stocks/${stock.ticker}`}
-                        className="hover:underline"
-                      >
-                        <div className="font-medium text-slate-100">
-                          {stock.ticker}
-                        </div>
-                        <div className="text-xs text-slate-400">
-                          {stock.name}
-                        </div>
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-slate-200">
-                      {stock.price}
-                    </TableCell>
-                    <TableCell
-                      className={stock.isUp ? "text-green-400" : "text-red-400"}
-                    >
-                      {stock.change}
-                    </TableCell>
-                    <TableCell>
-                      <MiniTrendChart
-                        data={stock.trendData}
-                        isUp={stock.isUp}
-                      />
-                    </TableCell>
+            {isLoadingWatchlist ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="text-slate-400">載入關注列表中...</div>
+              </div>
+            ) : watchlistSummary.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-slate-400 mb-4">您的關注列表是空的</p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/stocks">去搜尋股票</Link>
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-slate-700 hover:bg-slate-700/30">
+                    <TableHead className="text-slate-400">
+                      TICKER/NAME
+                    </TableHead>
+                    <TableHead className="text-slate-400">PRICE</TableHead>
+                    <TableHead className="text-slate-400">CHANGE</TableHead>
+                    <TableHead className="text-slate-400 w-[100px]">
+                      5-DAY TREND
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {watchlistSummary.map((stock) => (
+                    <TableRow
+                      key={stock.ticker}
+                      className="border-slate-700 hover:bg-slate-700/30"
+                    >
+                      <TableCell>
+                        <Link
+                          href={`/stocks/${stock.ticker}`}
+                          className="hover:underline"
+                        >
+                          <div className="font-medium text-slate-100">
+                            {stock.ticker}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {stock.name}
+                          </div>
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-slate-200">
+                        {stock.price}
+                      </TableCell>
+                      <TableCell
+                        className={
+                          stock.isUp ? "text-green-400" : "text-red-400"
+                        }
+                      >
+                        {stock.change}
+                      </TableCell>
+                      <TableCell>
+                        <MiniTrendChart
+                          data={stock.trendData}
+                          isUp={stock.isUp}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
         {/* Portfolio Summary */}

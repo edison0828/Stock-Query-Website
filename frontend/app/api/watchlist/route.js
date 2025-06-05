@@ -13,7 +13,6 @@ export async function GET(request) {
 
   let userIdAsBigInt;
   try {
-    // 假設 session.user.id 存儲的是字串形式的 BigInt
     userIdAsBigInt = BigInt(session.user.id);
   } catch (e) {
     console.error("無效的用戶 ID 格式:", session.user.id);
@@ -30,18 +29,11 @@ export async function GET(request) {
       },
       include: {
         stocks: {
-          // 根據你的 schema，關係名是 stocks
           select: {
             stock_id: true,
             company_name: true,
-            market_type: true, // 可以加入市場類型
+            market_type: true,
             currency: true,
-            historicalprices: {
-              // 可以考慮獲取最新的歷史價格作為當前價格
-              orderBy: { date: "desc" },
-              take: 1,
-              select: { close_price: true, date: true },
-            },
           },
         },
       },
@@ -52,74 +44,97 @@ export async function GET(request) {
 
     // 處理和格式化返回數據
     const formattedWatchlist = await Promise.all(
-      // 使用 Promise.all 因為獲取最新價格可能是異步的
       watchlistItemsFromDb.map(async (item) => {
         const stockInfo = item.stocks;
 
-        // --- 獲取或模擬動態股票數據 ---
-        // 策略：嘗試從最新的 historicalprices 獲取收盤價作為 current_price
-        // 否則，使用 placeholder 或調用外部 API (此處簡化)
+        // --- 獲取最新兩天的價格數據來計算漲跌 ---
+        const latestPrices = await prisma.historicalprices.findMany({
+          where: { stock_id: stockInfo.stock_id },
+          orderBy: { date: "desc" },
+          take: 2,
+          select: {
+            close_price: true,
+            date: true,
+            volume: true,
+          },
+        });
+
+        // --- 獲取最近5天的歷史價格用於趨勢圖 ---
+        const trendPrices = await prisma.historicalprices.findMany({
+          where: { stock_id: stockInfo.stock_id },
+          orderBy: { date: "desc" },
+          take: 5,
+          select: {
+            close_price: true,
+            date: true,
+          },
+        });
+
+        // 格式化趨勢數據（標準化處理）
+        let formattedTrendData = [];
+        if (trendPrices.length >= 2) {
+          const prices = trendPrices
+            .reverse()
+            .map((p) => parseFloat(p.close_price) || 0);
+          const basePrice = prices[0]; // 使用第一個價格作為基準
+
+          // 計算相對變化百分比，讓趨勢更明顯
+          formattedTrendData = prices.map((price, index) => {
+            const changePercent =
+              basePrice !== 0 ? ((price - basePrice) / basePrice) * 100 : 0;
+            return {
+              uv: 50 + changePercent * 10, // 基準線在50，放大變化幅度
+              originalPrice: price,
+              date: trendPrices[trendPrices.length - 1 - index]?.date
+                .toISOString()
+                .split("T")[0],
+            };
+          });
+        }
+
+        // --- 計算當前價格和漲跌幅 ---
         let current_price = 0;
         let latest_price_date = null;
         let change_amount = 0;
         let change_percent = 0;
         let is_up = false;
         let volume = "N/A";
-        let market_cap = "N/A"; // 市值通常不直接存在價格歷史中
+        let market_cap = "N/A";
 
-        const latestHistoricalPrice = await prisma.historicalprices.findFirst({
-          where: { stock_id: stockInfo.stock_id },
-          orderBy: { date: "desc" },
-          select: {
-            close_price: true,
-            open_price: true,
-            date: true,
-            volume: true,
-          },
-        });
-
-        if (
-          latestHistoricalPrice &&
-          latestHistoricalPrice.close_price !== null
-        ) {
-          current_price = parseFloat(latestHistoricalPrice.close_price);
-          latest_price_date = latestHistoricalPrice.date;
-          volume = latestHistoricalPrice.volume
-            ? latestHistoricalPrice.volume.toString()
+        if (latestPrices.length > 0 && latestPrices[0].close_price !== null) {
+          current_price = parseFloat(latestPrices[0].close_price);
+          latest_price_date = latestPrices[0].date;
+          volume = latestPrices[0].volume
+            ? latestPrices[0].volume.toString()
             : "N/A";
 
-          // 計算漲跌幅 (與開盤價比較，或與前一日收盤價比較 - 這裡簡化為與開盤價)
-          if (latestHistoricalPrice.open_price !== null) {
-            const open_price_float = parseFloat(
-              latestHistoricalPrice.open_price
-            );
-            change_amount = current_price - open_price_float;
-            if (open_price_float !== 0) {
-              change_percent = (change_amount / open_price_float) * 100;
+          // 計算與前一日的漲跌幅
+          if (latestPrices.length > 1 && latestPrices[1].close_price !== null) {
+            const previous_price = parseFloat(latestPrices[1].close_price);
+            change_amount = current_price - previous_price;
+            if (previous_price !== 0) {
+              change_percent = (change_amount / previous_price) * 100;
             }
           }
           is_up = change_amount >= 0;
         }
-        // 市值 (market_cap) 通常需要 (股票總股數 * 當前股價)，總股數可能在 Stocks 表或 FinancialReports 表
-        // 這裡我們暫時留空或用 N/A
 
         return {
-          // 使用 stock_id 作為前端 key 可能更穩定，因為 user_id, stock_id 組合才是 WatchlistItem 的唯一標識
-          // 但前端移除時可能只需要 stock_id (假設一個用戶對一個股票只有一條關注記錄)
-          // 如果需要 WatchlistItem 的複合主鍵，可以這樣組合:
-          id: `${item.user_id}_${item.stock_id}`, // 或者讓前端處理
+          id: `${item.user_id}_${item.stock_id}`,
           stock_id: stockInfo.stock_id,
-          symbol: stockInfo.stock_id, // 你的 stocks 表的 stock_id 就是 tickerSymbol
+          symbol: stockInfo.stock_id,
           name: stockInfo.company_name || "N/A",
           currency: stockInfo.currency || "USD",
           current_price: current_price,
           change_amount: change_amount,
           change_percent: change_percent,
           is_up: is_up,
-          market_cap: market_cap, // 暫時 N/A
-          volume: volume, // 暫時 N/A
+          market_cap: market_cap,
+          volume: volume,
           added_at: item.added_at,
-          _debug_latest_price_date: latest_price_date, // 用於調試
+          // 新增：5天趨勢數據
+          trend_data: formattedTrendData.length > 0 ? formattedTrendData : null,
+          _debug_latest_price_date: latest_price_date,
         };
       })
     );
@@ -127,9 +142,7 @@ export async function GET(request) {
     return NextResponse.json(formattedWatchlist, { status: 200 });
   } catch (error) {
     console.error("獲取關注列表失敗:", error);
-    // 避免暴露詳細錯誤給客戶端，但記錄在伺服器端
     if (error.code === "P2025" || error.code === "P2023") {
-      // Prisma 特定錯誤碼，如記錄未找到或 ID 格式錯誤
       return NextResponse.json({ error: "請求的資源無效。" }, { status: 400 });
     }
     return NextResponse.json(
