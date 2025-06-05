@@ -81,6 +81,9 @@ export default function DashboardPage() {
   // 新增投資組合狀態
   const [portfolioSummary, setPortfolioSummary] = useState(null);
   const [isLoadingPortfolio, setIsLoadingPortfolio] = useState(true);
+  // 新增交易記錄狀態
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
   const { toast } = useToast();
 
   // Session handling
@@ -193,13 +196,45 @@ export default function DashboardPage() {
     }
   }, [session, toast]);
 
+  // 獲取最近交易記錄的函數
+  const fetchRecentTransactions = useCallback(async () => {
+    if (!session?.user) return;
+
+    setIsLoadingTransactions(true);
+    try {
+      const response = await fetch("/api/portfolios?recent_transactions=5");
+      if (!response.ok) {
+        throw new Error("無法獲取最近交易記錄");
+      }
+
+      const data = await response.json();
+      setRecentTransactions(data);
+    } catch (error) {
+      console.error("Error fetching recent transactions:", error);
+      toast({
+        variant: "destructive",
+        title: "載入錯誤",
+        description: "無法載入最近交易記錄",
+      });
+      setRecentTransactions([]);
+    } finally {
+      setIsLoadingTransactions(false);
+    }
+  }, [session, toast]);
+
   // 當 session 可用時獲取數據
   useEffect(() => {
     if (session?.user) {
       fetchWatchlistSummary();
-      fetchPortfolioSummary(); // 加入這行
+      fetchPortfolioSummary();
+      fetchRecentTransactions(); // 添加這行
     }
-  }, [session, fetchWatchlistSummary, fetchPortfolioSummary]);
+  }, [
+    session,
+    fetchWatchlistSummary,
+    fetchPortfolioSummary,
+    fetchRecentTransactions,
+  ]);
 
   // 1. 處理載入狀態
   if (status === "loading") {
@@ -434,41 +469,60 @@ export default function DashboardPage() {
             <CardTitle className="text-xl font-semibold text-slate-100">
               Recent Transactions
             </CardTitle>
-            {/* <CardDescription className="text-slate-400">Your latest buy and sell activities.</CardDescription> */}
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableBody>
-                {mockRecentTransactions.map((tx, index) => (
-                  <TableRow
-                    key={index}
-                    className="border-slate-700 hover:bg-slate-700/30"
-                  >
-                    <TableCell>
-                      <Badge
-                        variant={tx.type === "BUY" ? "default" : "destructive"}
-                        className={
-                          tx.type === "BUY"
-                            ? "bg-green-600/80 hover:bg-green-600 text-green-50"
-                            : "bg-red-600/80 hover:bg-red-600 text-red-50"
-                        }
-                      >
-                        {tx.type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-100">
-                      {tx.ticker}
-                    </TableCell>
-                    <TableCell className="text-slate-300">
-                      {tx.shares} shares
-                    </TableCell>
-                    <TableCell className="text-right text-slate-400">
-                      {tx.date}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            {isLoadingTransactions ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="text-slate-400">載入交易記錄中...</div>
+              </div>
+            ) : recentTransactions.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-slate-400 mb-4">尚無交易記錄</p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/portfolios">開始第一筆交易</Link>
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableBody>
+                  {recentTransactions.map((tx) => (
+                    <TableRow
+                      key={tx.transaction_id}
+                      className="border-slate-700 hover:bg-slate-700/30"
+                    >
+                      <TableCell>
+                        <Badge
+                          variant={
+                            tx.type === "BUY" ? "default" : "destructive"
+                          }
+                          className={
+                            tx.type === "BUY"
+                              ? "bg-green-600/80 hover:bg-green-600 text-green-50"
+                              : "bg-red-600/80 hover:bg-red-600 text-red-50"
+                          }
+                        >
+                          {tx.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium text-slate-100">
+                        <Link
+                          href={`/stocks/${tx.ticker}`}
+                          className="hover:underline"
+                        >
+                          {tx.ticker}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-slate-300">
+                        {tx.shares} shares
+                      </TableCell>
+                      <TableCell className="text-right text-slate-400">
+                        {tx.date}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
           <CardFooter>
             <Button

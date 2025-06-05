@@ -13,9 +13,55 @@ export async function GET(request) {
   try {
     const userIdAsBigInt = BigInt(session.user.id);
 
-    // 檢查是否要求摘要資訊
+    // 檢查查詢參數
     const url = new URL(request.url);
     const includeSummary = url.searchParams.get("summary") === "true";
+    const recentTransactions = url.searchParams.get("recent_transactions");
+
+    // 如果請求最近交易記錄
+    if (recentTransactions) {
+      const limit = parseInt(recentTransactions) || 5;
+
+      const transactions = await prisma.transactions.findMany({
+        where: {
+          portfolios: {
+            user_id: userIdAsBigInt,
+          },
+        },
+        include: {
+          stocks: {
+            select: {
+              stock_id: true,
+              company_name: true,
+            },
+          },
+          portfolios: {
+            select: {
+              portfolio_name: true,
+            },
+          },
+        },
+        orderBy: {
+          transaction_date: "desc",
+        },
+        take: limit,
+      });
+
+      const formattedTransactions = transactions.map((tx) => ({
+        transaction_id: Number(tx.transaction_id),
+        type: tx.transaction_type,
+        ticker: tx.stock_id,
+        stock_name: tx.stocks.company_name,
+        portfolio_name: tx.portfolios.portfolio_name,
+        shares: Number(tx.quantity),
+        price_per_share: Number(tx.price_per_share),
+        total_value: Number(tx.quantity) * Number(tx.price_per_share),
+        date: tx.transaction_date.toLocaleDateString("zh-TW"),
+        currency: tx.currency,
+      }));
+
+      return NextResponse.json(formattedTransactions, { status: 200 });
+    }
 
     // 獲取投資組合和計算總價值
     const portfolios = await prisma.portfolios.findMany({

@@ -34,6 +34,22 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import AddWatchlistItemDialog from "@/components/shared/AddWatchlistItemDialog"; // 確保路徑正確
+// 添加圖表組件
+import { ResponsiveContainer, LineChart, Line } from "recharts";
+// 迷你圖表組件 (與 dashboard 相同)
+const MiniTrendChart = ({ data, isUp }) => (
+  <ResponsiveContainer width="100%" height={40}>
+    <LineChart data={data}>
+      <Line
+        type="monotone"
+        dataKey="uv"
+        stroke={isUp ? "#10B981" : "#F43F5E"}
+        strokeWidth={2}
+        dot={false}
+      />
+    </LineChart>
+  </ResponsiveContainer>
+);
 
 export default function MyWatchlistPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -45,17 +61,13 @@ export default function MyWatchlistPage() {
   const fetchWatchlist = useCallback(async () => {
     setIsLoading(true);
     try {
-      // --- 替換為真實 API 呼叫 ---
-      const response = await fetch(`/api/watchlist`); // GET 請求
+      const response = await fetch(`/api/watchlist`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || "無法獲取關注列表數據");
       }
       const data = await response.json();
-      // API 返回的數據結構應為:
-      // [{ id: 'user_id_stock_id', stock_id: 'AAPL', symbol: 'AAPL', name: 'Apple Inc.', ...other_fields }, ...]
       setWatchlistItems(data);
-      // --- 結束替換 ---
     } catch (error) {
       console.error("Error fetching watchlist:", error);
       toast({
@@ -128,6 +140,20 @@ export default function MyWatchlistPage() {
     return currencyCode ? currencyCode + " " : ""; // 如果有其他貨幣碼，直接顯示
   };
 
+  // 根據漲跌生成趨勢數據 (與 dashboard 相同的備用函數)
+  const generateTrendData = (isUp) => {
+    const baseValue = 15;
+    const variation = 5;
+    const trend = isUp ? 1 : -1;
+
+    return Array.from({ length: 6 }, (_, index) => ({
+      uv:
+        baseValue +
+        index * trend * 2 +
+        (Math.random() * variation - variation / 2),
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -166,13 +192,19 @@ export default function MyWatchlistPage() {
                   <TableHead className="text-slate-400 w-[200px]">
                     TICKER/NAME
                   </TableHead>
-                  <TableHead className="text-slate-400">
+                  <TableHead className="text-slate-400 w-[120px]">
                     CURRENT PRICE
                   </TableHead>
-                  <TableHead className="text-slate-400">CHANGE</TableHead>
-                  <TableHead className="text-slate-400">MARKET CAP</TableHead>
-                  <TableHead className="text-slate-400">VOLUME</TableHead>
-                  <TableHead className="text-right text-slate-400">
+                  <TableHead className="text-slate-400 w-[140px]">
+                    CHANGE
+                  </TableHead>
+                  <TableHead className="text-slate-400 w-[100px] px-4">
+                    5-DAY TREND
+                  </TableHead>
+                  <TableHead className="text-slate-400 w-[100px] px-4">
+                    VOLUME
+                  </TableHead>
+                  <TableHead className="text-right text-slate-400 w-[120px]">
                     ACTIONS
                   </TableHead>
                 </TableRow>
@@ -180,12 +212,12 @@ export default function MyWatchlistPage() {
               <TableBody>
                 {watchlistItems.map((item) => (
                   <TableRow
-                    key={item.id || item.stock_id} // 使用從 API 獲取的唯一標識
+                    key={item.id || item.stock_id}
                     className="border-slate-700 hover:bg-slate-700/30"
                   >
                     <TableCell>
                       <Link
-                        href={`/stocks/${item.symbol}`} // item.symbol 應該是股票代號
+                        href={`/stocks/${item.symbol}`}
                         className="hover:underline"
                       >
                         <div className="font-medium text-slate-100">
@@ -198,7 +230,7 @@ export default function MyWatchlistPage() {
                     </TableCell>
                     <TableCell className="text-slate-200">
                       {getCurrencySymbol(item.currency)}
-                      {(item.current_price || 0).toFixed(2)} {/* 提供預設值 */}
+                      {(item.current_price || 0).toFixed(2)}
                     </TableCell>
                     <TableCell
                       className={item.is_up ? "text-green-400" : "text-red-400"}
@@ -211,14 +243,21 @@ export default function MyWatchlistPage() {
                       {item.is_up ? "+" : ""}
                       {(item.change_amount || 0).toFixed(2)} (
                       {item.is_up ? "+" : ""}
-                      {(item.change_percent || 0).toFixed(2)}%){" "}
-                      {/* 提供預設值 */}
+                      {(item.change_percent || 0).toFixed(2)}%)
+                    </TableCell>
+                    <TableCell>
+                      {/* 使用趨勢圖表替代 MARKET CAP */}
+                      <MiniTrendChart
+                        data={
+                          item.trend_data && item.trend_data.length >= 2
+                            ? item.trend_data
+                            : generateTrendData(item.is_up)
+                        }
+                        isUp={item.is_up}
+                      />
                     </TableCell>
                     <TableCell className="text-slate-300">
-                      {item.market_cap || "N/A"} {/* 提供預設值 */}
-                    </TableCell>
-                    <TableCell className="text-slate-300">
-                      {item.volume || "N/A"} {/* 提供預設值 */}
+                      {item.volume || "N/A"}
                     </TableCell>
                     <TableCell className="text-right">
                       <AlertDialog>
