@@ -173,7 +173,32 @@ function PortfolioDetailPageContent() {
 
   const handleOpenTradeDialog = (action = "BUY", stockToPreselect = null) => {
     setTradeDialogInitialAction(action);
-    setSelectedStockForTrade(stockToPreselect);
+
+    // 如果有預選股票，從持倉中找到完整的股票資訊
+    if (stockToPreselect && portfolioData.holdings) {
+      const stockInfo = portfolioData.holdings.find(
+        (holding) => holding.symbol === stockToPreselect
+      );
+
+      if (stockInfo) {
+        // 構建完整的股票物件
+        const completeStockInfo = {
+          stock_id: stockInfo.stock_id,
+          symbol: stockInfo.symbol,
+          name: stockInfo.name,
+          current_price: stockInfo.current_price,
+          change_amount: 0, // 從持倉資料可能沒有這些資訊
+          change_percent: 0,
+          is_up: stockInfo.is_pnl_up || true, // 預設為上漲
+        };
+        setSelectedStockForTrade(completeStockInfo);
+      } else {
+        setSelectedStockForTrade(null);
+      }
+    } else {
+      setSelectedStockForTrade(null);
+    }
+
     setIsTradeDialogOpen(true);
   };
 
@@ -429,7 +454,7 @@ function PortfolioDetailPageContent() {
                             onClick={() =>
                               handleOpenTradeDialog("BUY", holding.symbol)
                             }
-                            className="text-xs border-green-600 text-green-400 hover:bg-green-600/20"
+                            className="text-xs border-green-600 text-green-600 hover:bg-green-600/20"
                           >
                             買入
                           </Button>
@@ -439,7 +464,7 @@ function PortfolioDetailPageContent() {
                             onClick={() =>
                               handleOpenTradeDialog("SELL", holding.symbol)
                             }
-                            className="text-xs border-red-600 text-red-400 hover:bg-red-600/20"
+                            className="text-xs border-red-600 text-red-600 hover:bg-red-600/20"
                           >
                             賣出
                           </Button>
@@ -591,9 +616,7 @@ function PortfolioDetailPageContent() {
             setIsTradeDialogOpen(false);
             setSelectedStockForTrade(null);
           }}
-          initialSelectedStock={
-            selectedStockForTrade ? { symbol: selectedStockForTrade } : null
-          }
+          initialSelectedStock={selectedStockForTrade} // 直接傳遞完整物件
           portfolioId={getPortfolioIdForAPI(portfolioId)}
           initialAction={tradeDialogInitialAction}
           onTradeSubmitSuccess={handleTradeSuccess}

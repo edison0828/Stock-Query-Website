@@ -43,6 +43,20 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { debounce } from "lodash";
 
+const mockMarketTypes = [
+  { id: "ALL", name: "全部市場類型" },
+  { id: "上市", name: "上市" },
+  { id: "上櫃", name: "上櫃" },
+  // { id: "終止上市櫃", name: "終止上市櫃" },
+];
+
+const mockSecurityStatuses = [
+  { id: "ALL", name: "全部狀態" },
+  { id: "正常", name: "正常" },
+  { id: "下市櫃/暫停交易", name: "下市櫃/暫停交易" },
+  { id: "減資/停止帳簿劃撥", name: "減資/停止帳簿劃撥" },
+];
+
 const ITEMS_PER_PAGE = 10;
 
 export default function StockSearchListPage() {
