@@ -83,48 +83,36 @@ export default function MyPortfoliosPage() {
     setIsCreateDialogOpen(false);
   };
 
-  const handlePortfolioRenamed = async (updatedData) => {
-    if (!selectedPortfolio) return;
+  const handlePortfolioRenamed = (updatedPortfolio) => {
+    console.log("收到更新的投資組合:", updatedPortfolio);
 
-    try {
-      const response = await fetch(`/api/portfolios/${selectedPortfolio.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updatedData),
-      });
+    // 直接更新本地狀態，不要再發送 API 請求
+    setPortfolios((prev) =>
+      prev.map((p) =>
+        p.portfolio_id === updatedPortfolio.portfolio_id
+          ? {
+              ...p,
+              name: updatedPortfolio.name,
+              description: updatedPortfolio.description,
+            }
+          : p
+      )
+    );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to rename portfolio");
-      }
-
-      toast({
-        title: "成功",
-        description: "投資組合已重新命名。",
-      });
-
-      fetchPortfolios();
-      setIsRenameDialogOpen(false);
-      setSelectedPortfolio(null);
-    } catch (error) {
-      console.error("重命名投資組合失敗:", error);
-      toast({
-        variant: "destructive",
-        title: "重新命名失敗",
-        description: error.message,
-      });
-    }
+    setIsRenameDialogOpen(false);
+    setSelectedPortfolio(null);
   };
 
   const handleDeletePortfolio = async () => {
     if (!selectedPortfolio) return;
 
     try {
-      const response = await fetch(`/api/portfolios/${selectedPortfolio.id}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `/api/portfolios/${selectedPortfolio.portfolio_id}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -136,7 +124,11 @@ export default function MyPortfoliosPage() {
         description: `投資組合 "${selectedPortfolio.name}" 已刪除。`,
       });
 
-      fetchPortfolios();
+      // 從本地狀態移除已刪除的投資組合
+      setPortfolios((prev) =>
+        prev.filter((p) => p.portfolio_id !== selectedPortfolio.portfolio_id)
+      );
+
       setIsDeleteDialogOpen(false);
       setSelectedPortfolio(null);
     } catch (error) {

@@ -8,7 +8,6 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +45,7 @@ export default function RenamePortfolioDialog({
       return;
     }
 
-    if (!portfolio) {
+    if (!portfolio || !portfolio.portfolio_id) {
       toast({
         variant: "destructive",
         title: "錯誤",
@@ -57,6 +56,12 @@ export default function RenamePortfolioDialog({
 
     setIsLoading(true);
     try {
+      console.log("發送更新請求:", {
+        portfolio_id: portfolio.portfolio_id,
+        portfolio_name: name.trim(),
+        description: description.trim() || null,
+      });
+
       const response = await fetch(
         `/api/portfolios/${portfolio.portfolio_id}`,
         {
@@ -71,18 +76,23 @@ export default function RenamePortfolioDialog({
         }
       );
 
+      console.log("API 響應狀態:", response.status);
+
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API 錯誤響應:", errorData);
         throw new Error(errorData.error || "重命名投資組合失敗");
       }
 
       const updatedPortfolio = await response.json();
+      console.log("更新成功，返回的數據:", updatedPortfolio);
 
       toast({
         title: "成功",
         description: `投資組合已成功重命名為 "${name}"。`,
       });
 
+      // 確保傳遞正確的更新數據給父組件
       if (onPortfolioRenamed) {
         onPortfolioRenamed(updatedPortfolio);
       }
@@ -93,14 +103,14 @@ export default function RenamePortfolioDialog({
       toast({
         variant: "destructive",
         title: "重命名失敗",
-        description: error.message,
+        description: error.message || "更新投資組合時發生錯誤",
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleClose = () => {
+  const handleCancel = () => {
     if (!isLoading) {
       setName("");
       setDescription("");
@@ -108,10 +118,16 @@ export default function RenamePortfolioDialog({
     }
   };
 
+  const handleDialogOpenChange = (open) => {
+    if (!open && !isLoading) {
+      handleCancel();
+    }
+  };
+
   if (!portfolio) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="sm:max-w-md bg-slate-800 border-slate-700 text-slate-200">
         <DialogHeader>
           <DialogTitle className="text-xl text-slate-50">
@@ -152,16 +168,15 @@ export default function RenamePortfolioDialog({
             />
           </div>
           <DialogFooter className="mt-6">
-            <DialogClose asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className="border-slate-600 hover:bg-slate-700 text-slate-300"
-                disabled={isLoading}
-              >
-                取消
-              </Button>
-            </DialogClose>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancel}
+              className="border-slate-600 hover:bg-slate-700 text-slate-300"
+              disabled={isLoading}
+            >
+              取消
+            </Button>
             <Button
               type="submit"
               disabled={isLoading || !name.trim()}
