@@ -219,6 +219,10 @@ export const authOptions = {
         token.provider = account.provider;
         // token.accessToken = account.access_token; // 如果需要儲存 access token
       }
+      // 為 credentials 登入設置預設 provider
+      if (!token.provider && user) {
+        token.provider = "credentials";
+      }
       return token;
     },
 

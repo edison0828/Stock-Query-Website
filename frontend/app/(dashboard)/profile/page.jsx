@@ -63,7 +63,6 @@ export default function ProfileSettingsPage() {
       return;
     }
     if (newPassword.length < 6) {
-      // 假設密碼最小長度為6
       setPasswordError("新密碼長度至少需要6個字元。");
       return;
     }
@@ -74,36 +73,32 @@ export default function ProfileSettingsPage() {
 
     setIsPasswordLoading(true);
     try {
-      // TODO: 呼叫後端 API 修改密碼
-      // API 應該驗證 currentPassword 是否正確
-      // 如果正確，則更新用戶的密碼為 newPassword (雜湊後儲存)
-      // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/users/change-password`, {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //     'Authorization': `Bearer ${session?.accessToken || ''}` // 假設 API 需要 token
-      //   },
-      //   body: JSON.stringify({ currentPassword, newPassword }),
-      // });
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
 
-      // if (!response.ok) {
-      //   const errorData = await response.json();
-      //   throw new Error(errorData.detail || "密碼修改失敗，請檢查您的舊密碼是否正確。");
-      // }
+      const data = await response.json();
 
-      // 模擬 API 呼叫
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      if (currentPassword !== "oldpassword") {
-        // 模擬舊密碼錯誤
-        throw new Error("舊密碼不正確。");
+      if (!response.ok) {
+        throw new Error(data.error || "密碼修改失敗");
       }
 
-      toast({ title: "成功", description: "您的密碼已成功修改。" });
+      toast({
+        title: "成功",
+        description: data.message || "您的密碼已成功修改。",
+      });
+
+      // 清空表單
       setCurrentPassword("");
       setNewPassword("");
       setConfirmNewPassword("");
-      // 可選：如果 NextAuth.js session 包含敏感資訊或需要重新驗證，可能需要 updateSession() 或 signOut() + signIn()
-      // await updateSession(); // 嘗試更新客戶端 session，如果後端 session 有變化
     } catch (error) {
       console.error("Change password error:", error);
       setPasswordError(error.message);

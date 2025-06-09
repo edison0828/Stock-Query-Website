@@ -336,7 +336,12 @@ export default function DashboardPage() {
             ) : watchlistSummary.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-slate-400 mb-4">您的關注列表是空的</p>
-                <Button asChild variant="outline" size="sm">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="text-slate-600"
+                >
                   <Link href="/stocks">去搜尋股票</Link>
                 </Button>
               </div>
@@ -543,7 +548,12 @@ export default function DashboardPage() {
             ) : recentTransactions.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-slate-400 mb-4">尚無交易記錄</p>
-                <Button asChild variant="outline" size="sm">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="text-slate-600"
+                >
                   <Link href="/portfolios">開始第一筆交易</Link>
                 </Button>
               </div>
