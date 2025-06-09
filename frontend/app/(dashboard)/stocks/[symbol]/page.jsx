@@ -390,12 +390,12 @@ function StockDetailPageContent() {
                   {stockData.basicInfo.marketCap}
                 </span>
               </div>
-              <div>
+              {/* <div>
                 <span className="font-semibold text-slate-400">董事長:</span>{" "}
                 <span className="text-slate-200">
                   {stockData.basicInfo.chairman}
                 </span>
-              </div>
+              </div> */}
               <div>
                 <span className="font-semibold text-slate-400">殖利率:</span>{" "}
                 <span className="text-slate-200">
@@ -416,12 +416,12 @@ function StockDetailPageContent() {
                   {stockData.basicInfo.pbRatio || "N/A"}
                 </span>
               </div>
-              <div>
+              {/* <div>
                 <span className="font-semibold text-slate-400">子行業:</span>{" "}
                 <span className="text-slate-200">
                   {stockData.basicInfo.industry}
                 </span>
-              </div>
+              </div> */}
               <div>
                 <span className="font-semibold text-slate-400">
                   執行長/董事長:
@@ -430,12 +430,12 @@ function StockDetailPageContent() {
                   {stockData.basicInfo.ceo}
                 </span>
               </div>
-              <div>
+              {/* <div>
                 <span className="font-semibold text-slate-400">員工人數:</span>{" "}
                 <span className="text-slate-200">
                   {stockData.basicInfo.employees}
                 </span>
-              </div>
+              </div> */}
             </div>
           </TabContentComponent>
         </TabsContent>
@@ -447,15 +447,79 @@ function StockDetailPageContent() {
             {stockData.financialReports.map((report, index) => (
               <div
                 key={index}
-                className="mb-3 p-3 border border-slate-700 rounded-md bg-slate-700/30"
+                className="mb-4 p-4 border border-slate-700 rounded-md bg-slate-700/30"
               >
-                <p className="font-semibold text-slate-100">
-                  {report.period} ({report.date})
-                </p>
-                <p className="text-sm text-slate-300">
-                  營收: {report.revenue} | 淨利: {report.netIncome} | EPS:{" "}
-                  {report.eps}
-                </p>
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-semibold text-slate-100 text-lg">
+                    {report.period} ({report.date})
+                  </h4>
+                  <span className="text-xs text-slate-400 bg-slate-600 px-2 py-1 rounded">
+                    {report.periodType}
+                  </span>
+                </div>
+
+                {/* 第一行：營收相關 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
+                  <div className="bg-slate-800/50 p-3 rounded">
+                    <p className="text-xs text-slate-400 mb-1">營業收入</p>
+                    <p className="text-sm font-medium text-slate-200">
+                      {report.revenue}
+                    </p>
+                  </div>
+                  <div className="bg-slate-800/50 p-3 rounded">
+                    <p className="text-xs text-slate-400 mb-1">營業利益</p>
+                    <p className="text-sm font-medium text-slate-200">
+                      {report.income}
+                    </p>
+                  </div>
+                  <div className="bg-slate-800/50 p-3 rounded">
+                    <p className="text-xs text-slate-400 mb-1">營業外收支</p>
+                    <p className="text-sm font-medium text-slate-200">
+                      {report.nonOperatingIncomeExpense}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 第二行：獲利相關 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-slate-800/50 p-3 rounded">
+                    <p className="text-xs text-slate-400 mb-1">淨利</p>
+                    <p className="text-sm font-medium text-slate-200">
+                      {report.netIncome}
+                    </p>
+                  </div>
+                  <div className="bg-slate-800/50 p-3 rounded">
+                    <p className="text-xs text-slate-400 mb-1">
+                      每股盈餘 (EPS)
+                    </p>
+                    <p className="text-sm font-medium text-slate-200">
+                      {report.eps}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 計算一些比率（如果有足夠數據） */}
+                {report.revenue && report.netIncome && (
+                  <div className="mt-3 pt-3 border-t border-slate-600">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">淨利率:</span>
+                      <span className="text-slate-300">
+                        {(() => {
+                          const revenue = parseFloat(
+                            report.revenue.replace(/[^\d.-]/g, "")
+                          );
+                          const netIncome = parseFloat(
+                            report.netIncome.replace(/[^\d.-]/g, "")
+                          );
+                          const margin = ((netIncome / revenue) * 100).toFixed(
+                            2
+                          );
+                          return `${margin}%`;
+                        })()}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </TabContentComponent>

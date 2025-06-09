@@ -53,13 +53,15 @@ export async function GET(request, { params }) {
     const financialReports = await prisma.financialreports.findMany({
       where: { stock_id: stockSymbol },
       orderBy: [{ year: "desc" }, { period_type: "desc" }],
-      take: 4,
+      // 移除 take: 4 限制，顯示所有財務報告
       select: {
         year: true,
         period_type: true,
         eps: true,
         revenue: true,
-        net_income: true,
+        Income: true, // 注意這裡是大寫 I（營業利益）
+        non_operating_income_expense: true, // 營業外收支
+        net_income: true, // 淨利
       },
     });
 
@@ -133,7 +135,12 @@ export async function GET(request, { params }) {
       financialReports: financialReports.map((report) => ({
         period: `${report.period_type} ${report.year}`,
         date: `${report.year}`,
+        periodType: report.period_type, // 新增期間類型
         revenue: formatCurrency(report.revenue),
+        income: formatCurrency(report.Income), // 營業利益
+        nonOperatingIncomeExpense: formatCurrency(
+          report.non_operating_income_expense
+        ), // 營業外收支
         netIncome: formatCurrency(report.net_income),
         eps: report.eps ? `$${Number(report.eps).toFixed(2)}` : "N/A",
       })),
