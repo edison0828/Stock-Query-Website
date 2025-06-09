@@ -1,9 +1,8 @@
-// app/(dashboard)/stocks/page.jsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation"; // 用於讀取 URL 查詢參數
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -22,7 +21,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"; // 用於篩選器
+} from "@/components/ui/select";
 import {
   Pagination,
   PaginationContent,
@@ -31,40 +30,43 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination"; // 用於分頁
+} from "@/components/ui/pagination";
 import {
   Search,
   Filter,
   Loader2 as Spinner,
   Info,
-  ChevronLeft,
-  ChevronRight,
+  Star,
+  CheckCircle,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useWatchlist } from "@/contexts/WatchlistContext";
 import { debounce } from "lodash";
 
 const mockMarketTypes = [
   { id: "ALL", name: "全部市場類型" },
   { id: "上市", name: "上市" },
   { id: "上櫃", name: "上櫃" },
-  // { id: "終止上市櫃", name: "終止上市櫃" },
 ];
 
 const mockSecurityStatuses = [
   { id: "ALL", name: "全部狀態" },
   { id: "正常", name: "正常" },
-  { id: "下市櫃/暫停交易", name: "下市櫃/暫停交易" },
-  { id: "減資/停止帳簿劃撥", name: "減資/停止帳簿劃撥" },
+  // { id: "下市櫃/暫停交易", name: "下市櫃/暫停交易" },
+  // { id: "減資/停止帳簿劃撥", name: "減資/停止帳簿劃撥" },
 ];
 
 const ITEMS_PER_PAGE = 10;
 
 export default function StockSearchListPage() {
   const router = useRouter();
-  const searchParams = useSearchParams(); // 獲取 URL 查詢參數
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { refreshWatchlist } = useWatchlist();
 
-  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || ""); // 從 URL q 參數初始化
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
   const [selectedMarketType, setSelectedMarketType] = useState(
     searchParams.get("market_type") || "ALL"
   );
@@ -76,8 +78,12 @@ export default function StockSearchListPage() {
   );
 
   const [stocks, setStocks] = useState([]);
-  const [totalStocks, setTotalStocks] = useState(0); // 總股票數，用於分頁
+  const [totalStocks, setTotalStocks] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+
+  // 關注列表相關狀態
+  const [watchingStocks, setWatchingStocks] = useState(new Set());
+  const [watchedStocks, setWatchedStocks] = useState(new Set());
 
   const [marketTypes, setMarketTypes] = useState(mockMarketTypes);
   const [securityStatuses, setSecurityStatuses] =
@@ -97,17 +103,38 @@ export default function StockSearchListPage() {
     return params;
   };
 
+  // 檢查關注列表狀態
+  const checkWatchlistStatus = useCallback(async (stocksList) => {
+    if (stocksList.length === 0) return;
+
+    try {
+      const stockIds = stocksList.map((stock) => stock.stock_id);
+      const response = await fetch("/api/watchlist/batch-check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ stock_ids: stockIds }),
+      });
+
+      if (response.ok) {
+        const watchedData = await response.json();
+        setWatchedStocks(new Set(watchedData.watched_stock_ids));
+      }
+    } catch (error) {
+      console.log("無法檢查關注狀態:", error);
+    }
+  }, []);
+
   // 核心的獲取股票數據函數
   const fetchStocksData = useCallback(
     async (page, query, marketType, securityStatus) => {
       setIsLoading(true);
       const apiParams = buildApiParams(page, query, marketType, securityStatus);
-      const urlParamsForRouter = new URLSearchParams(apiParams); // 複製一份用於 router，不包含 limit
+      const urlParamsForRouter = new URLSearchParams(apiParams);
       urlParamsForRouter.delete("limit");
-      if (page === 1) urlParamsForRouter.delete("page"); // 如果是第一頁，URL中可以省略 page=1
+      if (page === 1) urlParamsForRouter.delete("page");
 
-      // 更新 URL，但不觸發導航 (僅替換歷史記錄)
-      // 只有在參數實際變化時才更新 URL，避免不必要的 router.replace
       const currentSearchParams = new URLSearchParams(searchParams.toString());
       if (currentSearchParams.toString() !== urlParamsForRouter.toString()) {
         router.replace(`/stocks?${urlParamsForRouter.toString()}`, {
@@ -116,7 +143,6 @@ export default function StockSearchListPage() {
       }
 
       try {
-        // 使用內部 API 路由
         const apiUrl = `/api/stocks`;
         const response = await fetch(`${apiUrl}?${apiParams.toString()}`);
 
@@ -125,10 +151,14 @@ export default function StockSearchListPage() {
         }
 
         const data = await response.json();
+        const stocksList = data.items || [];
 
-        setStocks(data.items || []);
+        setStocks(stocksList);
         setTotalStocks(data.total || 0);
         setCurrentPage(page);
+
+        // 檢查關注狀態
+        await checkWatchlistStatus(stocksList);
       } catch (error) {
         console.error("Error fetching stocks:", error);
         toast({
@@ -142,8 +172,74 @@ export default function StockSearchListPage() {
         setIsLoading(false);
       }
     },
-    [router, searchParams, toast]
-  ); // searchParams 加入依賴，以便比較是否需要更新 URL
+    [router, searchParams, toast, checkWatchlistStatus]
+  );
+
+  // 加入/移除關注功能
+  const handleToggleWatchlist = async (stock) => {
+    const stockId = stock.stock_id;
+    const isCurrentlyWatched = watchedStocks.has(stockId);
+
+    setWatchingStocks((prev) => new Set(prev).add(stockId));
+
+    try {
+      const method = isCurrentlyWatched ? "DELETE" : "POST";
+      const url = isCurrentlyWatched
+        ? `/api/watchlist/${encodeURIComponent(stockId)}`
+        : `/api/watchlist`;
+
+      const response = await fetch(url, {
+        method,
+        headers:
+          method === "POST"
+            ? {
+                "Content-Type": "application/json",
+              }
+            : {},
+        body:
+          method === "POST" ? JSON.stringify({ stock_id: stockId }) : undefined,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "操作失敗");
+      }
+
+      // 更新本地狀態
+      setWatchedStocks((prev) => {
+        const newSet = new Set(prev);
+        if (isCurrentlyWatched) {
+          newSet.delete(stockId);
+        } else {
+          newSet.add(stockId);
+        }
+        return newSet;
+      });
+
+      // 刷新側邊欄摘要
+      refreshWatchlist();
+
+      toast({
+        title: isCurrentlyWatched ? "已從關注列表移除" : "已加入關注列表",
+        description: `${stock.stock_id} (${stock.company_name}) ${
+          isCurrentlyWatched ? "已移除" : "已加入"
+        }關注列表。`,
+      });
+    } catch (error) {
+      console.error("Error toggling watchlist:", error);
+      toast({
+        variant: "destructive",
+        title: "操作失敗",
+        description: error.message || "無法更新關注列表，請稍後再試。",
+      });
+    } finally {
+      setWatchingStocks((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(stockId);
+        return newSet;
+      });
+    }
+  };
 
   // 使用 debounce 來處理搜尋框輸入
   const debouncedSearch = useCallback(
@@ -179,21 +275,17 @@ export default function StockSearchListPage() {
     const securityStatusFromUrl = searchParams.get("security_status") || "ALL";
     const pageFromUrl = parseInt(searchParams.get("page") || "1", 10);
 
-    // 設置狀態以匹配 URL，這樣 UI 和 URL 保持同步
-    // 這些 setState 不會立即觸發上面的 searchTerm useEffect，因為我們有條件判斷
     setSearchTerm(queryFromUrl);
     setSelectedMarketType(marketTypeFromUrl);
     setSelectedSecurityStatus(securityStatusFromUrl);
-    // setCurrentPage(pageFromUrl); // currentPage 由 fetchStocksData 內部設置
 
-    // 初始載入時獲取數據
     fetchStocksData(
       pageFromUrl,
       queryFromUrl,
       marketTypeFromUrl,
       securityStatusFromUrl
     );
-  }, []); // 空依賴數組，只在組件掛載時執行一次以同步 URL 參數
+  }, []);
 
   // Handler for filter button
   const handleApplyFilters = () => {
@@ -372,6 +464,9 @@ export default function StockSearchListPage() {
                       <TableHead className="text-slate-400 text-right">
                         當前股價
                       </TableHead>
+                      <TableHead className="text-slate-400 text-center w-[160px]">
+                        操作
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -426,30 +521,10 @@ export default function StockSearchListPage() {
                                 >
                                   {/* 漲跌箭頭 */}
                                   {priceChangeInfo.isPositive && (
-                                    <svg
-                                      className="w-3 h-3"
-                                      fill="currentColor"
-                                      viewBox="0 0 20 20"
-                                    >
-                                      <path
-                                        fillRule="evenodd"
-                                        d="M5.293 7.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 4.414 6.707 7.707a1 1 0 01-1.414 0z"
-                                        clipRule="evenodd"
-                                      />
-                                    </svg>
+                                    <TrendingUp className="w-3 h-3" />
                                   )}
                                   {priceChangeInfo.isNegative && (
-                                    <svg
-                                      className="w-3 h-3"
-                                      fill="currentColor"
-                                      viewBox="0 0 20 20"
-                                    >
-                                      <path
-                                        fillRule="evenodd"
-                                        d="M14.707 12.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 15.586l3.293-3.293a1 1 0 011.414 0z"
-                                        clipRule="evenodd"
-                                      />
-                                    </svg>
+                                    <TrendingDown className="w-3 h-3" />
                                   )}
                                   {priceChangeInfo.isFlat && (
                                     <span className="w-3 h-3 flex items-center justify-center">
@@ -476,6 +551,53 @@ export default function StockSearchListPage() {
                                 )}
                             </div>
                           </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                variant={
+                                  watchedStocks.has(stock.stock_id)
+                                    ? "default"
+                                    : "outline"
+                                }
+                                size="sm"
+                                onClick={() => handleToggleWatchlist(stock)}
+                                disabled={watchingStocks.has(stock.stock_id)}
+                                className={
+                                  watchedStocks.has(stock.stock_id)
+                                    ? "bg-amber-600 hover:bg-amber-700 text-white min-w-[80px]"
+                                    : "border-slate-600 hover:bg-slate-600 text-slate-200 min-w-[80px]"
+                                }
+                              >
+                                {watchingStocks.has(stock.stock_id) ? (
+                                  <>
+                                    <Spinner className="h-4 w-4 animate-spin mr-1 text-slate-600" />
+                                    <span className="hidden sm:inline text-slate-600">
+                                      處理中
+                                    </span>
+                                  </>
+                                ) : watchedStocks.has(stock.stock_id) ? (
+                                  <>
+                                    <CheckCircle className="h-4 w-4 mr-1 text-white" />
+                                    <span className="hidden sm:inline text-white">
+                                      已關注
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Star className="h-4 w-4 mr-1 text-slate-500" />
+                                    <span className="hidden sm:inline text-slate-500">
+                                      關注
+                                    </span>
+                                  </>
+                                )}
+                              </Button>
+                              <Button size="sm" asChild variant="secondary">
+                                <Link href={`/stocks/${stock.stock_id}`}>
+                                  詳情
+                                </Link>
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -500,10 +622,8 @@ export default function StockSearchListPage() {
                         }
                       />
                     </PaginationItem>
-                    {/* 簡單的分頁邏輯，可根據需要擴展 */}
                     {[...Array(totalPages)].map((_, i) => {
                       const pageNum = i + 1;
-                      // 簡化顯示邏輯：當前頁，前後各一頁，首尾頁，中間省略號
                       const showPage =
                         pageNum === 1 ||
                         pageNum === totalPages ||
