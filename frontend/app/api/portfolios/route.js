@@ -412,10 +412,7 @@ export async function DELETE(request, { params }) {
       },
     });
 
-    return NextResponse.json(
-      { message: "投資組合刪除成功" },
-      { status: 200 }
-    );
+    return NextResponse.json({ message: "投資組合刪除成功" }, { status: 200 });
   } catch (error) {
     console.error("刪除投資組合失敗:", error);
     return NextResponse.json(

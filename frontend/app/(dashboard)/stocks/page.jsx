@@ -49,6 +49,7 @@ const mockMarketTypes = [
   { id: "ALL", name: "全部市場類型" },
   { id: "上市", name: "上市" },
   { id: "上櫃", name: "上櫃" },
+  { id: "興櫃", name: "興櫃" },
 ];
 
 const mockSecurityStatuses = [

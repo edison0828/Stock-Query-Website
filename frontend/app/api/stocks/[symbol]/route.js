@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+// 選擇方案 A：直接導入 JSON
+import companyData from "@/data/company.json";
+// 選擇方案 B：使用 CSV 解析器
+// import { getCompanyData } from "@/lib/csv-parser";
 
 export async function GET(request, { params }) {
   try {
@@ -31,17 +35,25 @@ export async function GET(request, { params }) {
       );
     }
 
-    // 2. 獲取歷史價格數據（不同時間區間）
+    // 2. 獲取 CSV 中的基本資訊
+    // 方案 A：使用 JSON 檔案
+    const csvBasicInfo = companyData[stockSymbol] || {};
+
+    // 方案 B：使用 CSV 解析器
+    // const companyDataMap = getCompanyData();
+    // const csvBasicInfo = companyDataMap.get(stockSymbol) || {};
+
+    // 3. 獲取歷史價格數據（不同時間區間）
     const historicalData = await getHistoricalPriceData(stockSymbol);
 
-    // 3. 獲取最新價格和變化
+    // 4. 獲取最新價格和變化
     const latestPrice = await getLatestPriceInfo(stockSymbol);
 
-    // 4. 獲取財務報告
+    // 5. 獲取財務報告
     const financialReports = await prisma.financialreports.findMany({
       where: { stock_id: stockSymbol },
       orderBy: [{ year: "desc" }, { period_type: "desc" }],
-      take: 4, // 最近4期
+      take: 4,
       select: {
         year: true,
         period_type: true,
@@ -51,22 +63,22 @@ export async function GET(request, { params }) {
       },
     });
 
-    // 5. 獲取股息記錄
+    // 6. 獲取股息記錄
     const dividends = await prisma.dividends.findMany({
       where: { stock_id: stockSymbol },
       orderBy: { dividend_date: "desc" },
-      take: 10, // 最近10次股息
+      take: 10,
       select: {
         dividend_date: true,
         dividend_value: true,
       },
     });
 
-    // 6. 獲取股票分割記錄
+    // 7. 獲取股票分割記錄
     const splits = await prisma.stocksplits.findMany({
       where: { stock_id: stockSymbol },
       orderBy: { split_date: "desc" },
-      take: 5, // 最近5次分割
+      take: 5,
       select: {
         split_date: true,
         split_ratio_before: true,
@@ -74,7 +86,7 @@ export async function GET(request, { params }) {
       },
     });
 
-    // 7. 組合回應數據
+    // 8. 組合回應數據，整合 CSV 資訊
     const responseData = {
       symbol: stock.stock_id,
       companyName: stock.company_name,
@@ -94,20 +106,27 @@ export async function GET(request, { params }) {
       // 歷史數據
       historicalData,
 
-      // 基本資訊（目前從股票表獲取，可以後續擴展）
+      // 基本資訊（整合 CSV 數據）
       basicInfo: {
         description: `${stock.company_name} 是一家在 ${stock.market_type} 交易的公司。`,
-        sector: "待補充", // 需要額外的表或 API
-        industry: "待補充",
-        marketCap: "待補充",
-        peRatio: "待補充",
-        dividendYield: calculateDividendYield(
-          dividends,
-          latestPrice.currentPrice
-        ),
+        sector: csvBasicInfo.industry || "待補充",
+        industry: csvBasicInfo.industry || "待補充",
+        marketCap: csvBasicInfo.capital
+          ? formatCurrency(csvBasicInfo.capital)
+          : "待補充",
+        peRatio: csvBasicInfo.pe_ratio
+          ? csvBasicInfo.pe_ratio.toString()
+          : "待補充",
+        dividendYield: csvBasicInfo.dividend_yield
+          ? `${csvBasicInfo.dividend_yield}%`
+          : calculateDividendYield(dividends, latestPrice.currentPrice),
         employees: "待補充",
-        ceo: "待補充",
+        ceo: csvBasicInfo.chairman || "待補充",
         website: "待補充",
+        // 新增的 CSV 欄位
+        chairman: csvBasicInfo.chairman || "待補充",
+        capital: csvBasicInfo.capital || null,
+        pbRatio: csvBasicInfo.pb_ratio || null,
       },
 
       // 財務報告
@@ -135,7 +154,7 @@ export async function GET(request, { params }) {
         )}`,
       })),
 
-      // 新聞（暫時為空，可以後續整合外部 API）
+      // 新聞
       news: [],
     };
 

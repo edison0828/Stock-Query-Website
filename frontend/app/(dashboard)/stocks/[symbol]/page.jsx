@@ -335,7 +335,7 @@ function StockDetailPageContent() {
       </Card>
       {/* 資訊頁籤 */}
       <Tabs defaultValue="basic-info" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 bg-slate-700/50 p-1 h-auto">
+        <TabsList className="grid w-full grid-cols-3 bg-slate-700/50 p-1 h-auto">
           <TabsTrigger
             value="basic-info"
             className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
@@ -354,7 +354,7 @@ function StockDetailPageContent() {
           >
             股息記錄
           </TabsTrigger>
-          <TabsTrigger
+          {/* <TabsTrigger
             value="splits"
             className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
           >
@@ -365,7 +365,7 @@ function StockDetailPageContent() {
             className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
           >
             新聞
-          </TabsTrigger>
+          </TabsTrigger> */}
         </TabsList>
         <TabsContent
           value="basic-info"
@@ -377,43 +377,57 @@ function StockDetailPageContent() {
             </p>
             <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="font-semibold text-slate-400">
-                  行業 (Sector):
-                </span>{" "}
+                <span className="font-semibold text-slate-400">行業:</span>{" "}
                 <span className="text-slate-200">
                   {stockData.basicInfo.sector}
                 </span>
               </div>
               <div>
                 <span className="font-semibold text-slate-400">
-                  子行業 (Industry):
-                </span>{" "}
-                <span className="text-slate-200">
-                  {stockData.basicInfo.industry}
-                </span>
-              </div>
-              <div>
-                <span className="font-semibold text-slate-400">
-                  市值 (Market Cap):
+                  實收資本額:
                 </span>{" "}
                 <span className="text-slate-200">
                   {stockData.basicInfo.marketCap}
                 </span>
               </div>
               <div>
-                <span className="font-semibold text-slate-400">
-                  本益比 (P/E Ratio):
-                </span>{" "}
+                <span className="font-semibold text-slate-400">董事長:</span>{" "}
+                <span className="text-slate-200">
+                  {stockData.basicInfo.chairman}
+                </span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-400">殖利率:</span>{" "}
+                <span className="text-slate-200">
+                  {stockData.basicInfo.dividendYield}
+                </span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-400">本益比:</span>{" "}
                 <span className="text-slate-200">
                   {stockData.basicInfo.peRatio}
                 </span>
               </div>
               <div>
                 <span className="font-semibold text-slate-400">
-                  股息率 (Yield):
+                  股價淨值比:
                 </span>{" "}
                 <span className="text-slate-200">
-                  {stockData.basicInfo.dividendYield}
+                  {stockData.basicInfo.pbRatio || "N/A"}
+                </span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-400">子行業:</span>{" "}
+                <span className="text-slate-200">
+                  {stockData.basicInfo.industry}
+                </span>
+              </div>
+              <div>
+                <span className="font-semibold text-slate-400">
+                  執行長/董事長:
+                </span>{" "}
+                <span className="text-slate-200">
+                  {stockData.basicInfo.ceo}
                 </span>
               </div>
               <div>
@@ -421,25 +435,6 @@ function StockDetailPageContent() {
                 <span className="text-slate-200">
                   {stockData.basicInfo.employees}
                 </span>
-              </div>
-              <div>
-                <span className="font-semibold text-slate-400">
-                  執行長 (CEO):
-                </span>{" "}
-                <span className="text-slate-200">
-                  {stockData.basicInfo.ceo}
-                </span>
-              </div>
-              <div>
-                <span className="font-semibold text-slate-400">公司網站:</span>{" "}
-                <a
-                  href={stockData.basicInfo.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:underline"
-                >
-                  {stockData.basicInfo.website}
-                </a>
               </div>
             </div>
           </TabContentComponent>
@@ -479,6 +474,8 @@ function StockDetailPageContent() {
             ))}
           </TabContentComponent>
         </TabsContent>
+        {/* 暫時註解掉，尚未實作 */}
+        {/*
         <TabsContent
           value="splits"
           className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
@@ -500,8 +497,7 @@ function StockDetailPageContent() {
               <div key={index} className="mb-3">
                 <h4 className="font-semibold text-slate-100 hover:text-blue-400 cursor-pointer">
                   {item.title}
-                </h4>{" "}
-                {/* 假設新聞標題可以點擊 */}
+                </h4>
                 <p className="text-xs text-slate-400">
                   {item.date} - {item.source}
                 </p>
@@ -509,6 +505,7 @@ function StockDetailPageContent() {
             ))}
           </TabContentComponent>
         </TabsContent>
+        */}
       </Tabs>
       {/* 渲染 TradeDialog */}
       {stockData && ( // 確保 stockData 存在才渲染 Dialog
