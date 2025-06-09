@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import AuthProvider from "./auth-provider"; // 引入 AuthProvider
+import { WatchlistProvider } from "@/contexts/WatchlistContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,9 +17,11 @@ export default function RootLayout({ children }) {
     <html lang="zh-TW" suppressHydrationWarning>
       <body className={inter.className}>
         <AuthProvider>
-          {" "}
-          {/* 包裹 ThemeProvider 和 children */}
-          {children}
+          <WatchlistProvider>
+            {" "}
+            {/* 包裹 ThemeProvider 和 children */}
+            {children}
+          </WatchlistProvider>
           <Toaster />
         </AuthProvider>
       </body>

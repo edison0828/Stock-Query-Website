@@ -40,25 +40,6 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation"; // For App Router
 
-// 模擬數據 (之後會從 API 獲取)
-
-const mockMarketOverview = [
-  { name: "TAIEX", value: "16,500.75", change: "+120.50 (+0.73%)", isUp: true },
-  {
-    name: "S&P 500",
-    value: "4,450.30",
-    change: "-22.11 (-0.49%)",
-    isUp: false,
-  },
-  { name: "NASDAQ", value: "13,780.92", change: "+55.60 (+0.40%)", isUp: true },
-];
-
-const mockRecentTransactions = [
-  { type: "BUY", ticker: "AAPL", shares: 10, date: "Oct 25, 2023" },
-  { type: "SELL", ticker: "2330", shares: 500, date: "Oct 24, 2023" },
-  { type: "BUY", ticker: "GOOGL", shares: 5, date: "Oct 23, 2023" },
-];
-
 // 迷你圖表組件
 const MiniTrendChart = ({ data, isUp }) => (
   <ResponsiveContainer width="100%" height={40}>
@@ -84,6 +65,9 @@ export default function DashboardPage() {
   // 新增交易記錄狀態
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(true);
+  // 新增市場概覽狀態
+  const [marketOverview, setMarketOverview] = useState([]);
+  const [isLoadingMarketOverview, setIsLoadingMarketOverview] = useState(true);
   const { toast } = useToast();
 
   // Session handling
@@ -222,6 +206,30 @@ export default function DashboardPage() {
     }
   }, [session, toast]);
 
+  // 獲取市場概覽數據的函數
+  const fetchMarketOverview = useCallback(async () => {
+    setIsLoadingMarketOverview(true);
+    try {
+      const response = await fetch("/api/market-overview");
+      if (!response.ok) {
+        throw new Error("無法獲取市場概覽");
+      }
+
+      const data = await response.json();
+      setMarketOverview(data);
+    } catch (error) {
+      console.error("Error fetching market overview:", error);
+      toast({
+        variant: "destructive",
+        title: "載入錯誤",
+        description: "無法載入市場概覽",
+      });
+      setMarketOverview([]);
+    } finally {
+      setIsLoadingMarketOverview(false);
+    }
+  }, [toast]);
+
   // 當 session 可用時獲取數據
   useEffect(() => {
     if (session?.user) {
@@ -229,11 +237,14 @@ export default function DashboardPage() {
       fetchPortfolioSummary();
       fetchRecentTransactions(); // 添加這行
     }
+    // 市場概覽不需要登入就可以查看
+    fetchMarketOverview();
   }, [
     session,
     fetchWatchlistSummary,
     fetchPortfolioSummary,
     fetchRecentTransactions,
+    fetchMarketOverview,
   ]);
 
   // 1. 處理載入狀態
@@ -278,6 +289,25 @@ export default function DashboardPage() {
     const sign = isUp ? "+" : "";
     return `${sign}${formatCurrency(amount)}`;
   };
+  // 格式化數字顯示
+  const formatVolume = (volume) => {
+    if (volume >= 1000000) {
+      return `${(volume / 1000000).toFixed(1)}M`;
+    } else if (volume >= 1000) {
+      return `${(volume / 1000).toFixed(1)}K`;
+    }
+    return volume.toLocaleString();
+  };
+
+  const formatTradingAmount = (amount) => {
+    if (amount >= 1000000000) {
+      return `${(amount / 1000000000).toFixed(1)}B`;
+    } else if (amount >= 1000000) {
+      return `${(amount / 1000000).toFixed(1)}M`;
+    }
+    return amount.toLocaleString();
+  };
+
   return (
     <div className="grid gap-6 md:gap-8">
       {/* 可以考慮在這裡顯示用戶名等 */}
@@ -438,28 +468,63 @@ export default function DashboardPage() {
         <Card className="bg-slate-800 border-slate-700 text-slate-200">
           <CardHeader>
             <CardTitle className="text-xl font-semibold text-slate-100">
-              Market Overview
+              熱門交易股票 Top 5
             </CardTitle>
+            <CardDescription className="text-slate-400 text-sm">
+              依交易量×股價排序
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {mockMarketOverview.map((market) => (
-              <div
-                key={market.name}
-                className="flex items-center justify-between"
-              >
-                <div>
-                  <div className="font-medium text-slate-100">
-                    {market.name}
-                  </div>
-                  <div className="text-sm text-slate-300">{market.value}</div>
-                </div>
-                <div
-                  className={market.isUp ? "text-green-400" : "text-red-400"}
-                >
-                  {market.change}
-                </div>
+          <CardContent className="space-y-3">
+            {isLoadingMarketOverview ? (
+              <div className="flex justify-center items-center py-8">
+                <div className="text-slate-400">載入市場數據中...</div>
               </div>
-            ))}
+            ) : marketOverview.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-slate-400">暫無市場數據</p>
+              </div>
+            ) : (
+              marketOverview.map((stock, index) => (
+                <div
+                  key={stock.stock_id}
+                  className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-bold text-white">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <Link
+                        href={`/stocks/${stock.stock_id}`}
+                        className="font-medium text-slate-100 hover:text-blue-400 hover:underline"
+                      >
+                        {stock.stock_id}
+                      </Link>
+                      <div className="text-xs text-slate-400 truncate max-w-[120px]">
+                        {stock.company_name}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-slate-100">
+                      {stock.currency === "USD" ? "$" : "NT$"}
+                      {stock.current_price.toFixed(2)}
+                    </div>
+                    <div
+                      className={`text-xs ${
+                        stock.is_up ? "text-green-400" : "text-red-400"
+                      }`}
+                    >
+                      {stock.is_up ? "+" : ""}
+                      {stock.percent_change.toFixed(2)}%
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      量: {formatVolume(stock.volume)}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 

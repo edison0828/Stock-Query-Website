@@ -35,6 +35,7 @@ import {
   Legend,
 } from "recharts"; // 用於主要圖表
 import { useToast } from "@/hooks/use-toast"; // 引入 useToast
+import { useWatchlist } from "@/contexts/WatchlistContext";
 
 // 時間區間按鈕
 const timeRanges = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
@@ -57,6 +58,9 @@ function StockDetailPageContent() {
   const params = useParams(); // 獲取動態路由參數 { symbol: 'AAPL' }
   const stockSymbol = params.symbol?.toUpperCase(); // 確保是大寫
   const { toast } = useToast();
+
+  // 使用 Context 中的 refreshWatchlist 函數
+  const { refreshWatchlist } = useWatchlist();
 
   const [stockData, setStockData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,6 +134,9 @@ function StockDetailPageContent() {
 
       const data = await response.json();
       setIsWatched(data.isWatched);
+
+      // 刷新側邊欄摘要
+      refreshWatchlist();
 
       toast({
         title: newWatchStatus ? "已加入關注列表" : "已從關注列表移除",

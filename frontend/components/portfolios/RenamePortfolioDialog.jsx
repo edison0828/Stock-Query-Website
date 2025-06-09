@@ -1,4 +1,3 @@
-// components/portfolios/RenamePortfolioDialog.jsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -30,13 +29,14 @@ export default function RenamePortfolioDialog({
 
   useEffect(() => {
     if (portfolio) {
-      setName(portfolio.name);
+      setName(portfolio.name || "");
       setDescription(portfolio.description || "");
     }
   }, [portfolio]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!name.trim()) {
       toast({
         variant: "destructive",
@@ -45,29 +45,51 @@ export default function RenamePortfolioDialog({
       });
       return;
     }
-    if (!portfolio) return;
+
+    if (!portfolio) {
+      toast({
+        variant: "destructive",
+        title: "錯誤",
+        description: "無效的投資組合資訊。",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // TODO: 呼叫 API 更新投資組合名稱和描述
-      // const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/portfolios/${portfolio.id}`, {
-      //   method: 'PUT', // or PATCH
-      //   headers: { 'Content-Type': 'application/json' /*, 'Authorization': `Bearer ${token}`*/ },
-      //   body: JSON.stringify({ portfolio_name: name, description }),
-      // });
-      // if (!response.ok) throw new Error("重命名投資組合失敗");
-      // const updatedPortfolio = await response.json();
+      const response = await fetch(
+        `/api/portfolios/${portfolio.portfolio_id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            portfolio_name: name.trim(),
+            description: description.trim() || null,
+          }),
+        }
+      );
 
-      await new Promise((resolve) => setTimeout(resolve, 500)); // Simulate API
-      const updatedPortfolio = { ...portfolio, name, description };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "重命名投資組合失敗");
+      }
+
+      const updatedPortfolio = await response.json();
 
       toast({
         title: "成功",
         description: `投資組合已成功重命名為 "${name}"。`,
       });
+
       if (onPortfolioRenamed) {
         onPortfolioRenamed(updatedPortfolio);
       }
+
+      onClose();
     } catch (error) {
+      console.error("重命名投資組合失敗:", error);
       toast({
         variant: "destructive",
         title: "重命名失敗",
@@ -78,10 +100,18 @@ export default function RenamePortfolioDialog({
     }
   };
 
+  const handleClose = () => {
+    if (!isLoading) {
+      setName("");
+      setDescription("");
+      onClose();
+    }
+  };
+
   if (!portfolio) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md bg-slate-800 border-slate-700 text-slate-200">
         <DialogHeader>
           <DialogTitle className="text-xl text-slate-50">
@@ -101,6 +131,7 @@ export default function RenamePortfolioDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 bg-slate-700 border-slate-600 text-slate-100"
+              disabled={isLoading}
               required
             />
           </div>
@@ -116,6 +147,7 @@ export default function RenamePortfolioDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="mt-1 bg-slate-700 border-slate-600 text-slate-100"
+              disabled={isLoading}
               rows={3}
             />
           </div>
@@ -124,14 +156,15 @@ export default function RenamePortfolioDialog({
               <Button
                 type="button"
                 variant="outline"
-                className="border-slate-600 hover:bg-slate-700 text-slate-800"
+                className="border-slate-600 hover:bg-slate-700 text-slate-300"
+                disabled={isLoading}
               >
                 取消
               </Button>
             </DialogClose>
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !name.trim()}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {isLoading ? "儲存中..." : "確認儲存"}

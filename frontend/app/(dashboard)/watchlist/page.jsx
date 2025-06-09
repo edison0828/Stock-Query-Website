@@ -34,6 +34,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import AddWatchlistItemDialog from "@/components/shared/AddWatchlistItemDialog"; // 確保路徑正確
+import { useWatchlist } from "@/contexts/WatchlistContext";
+
 // 添加圖表組件
 import { ResponsiveContainer, LineChart, Line } from "recharts";
 // 迷你圖表組件 (與 dashboard 相同)
@@ -57,6 +59,9 @@ export default function MyWatchlistPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [removingItemId, setRemovingItemId] = useState(null);
   const { toast } = useToast();
+
+  // 使用 Context 中的 refreshWatchlist 函數
+  const { refreshWatchlist } = useWatchlist();
 
   const fetchWatchlist = useCallback(async () => {
     setIsLoading(true);
@@ -87,6 +92,7 @@ export default function MyWatchlistPage() {
 
   const handleWatchlistUpdated = () => {
     fetchWatchlist(); // 當 AddWatchlistItemDialog 成功加入股票後，調用此函數來刷新主列表
+    refreshWatchlist(); // 刷新側邊欄的摘要
   };
 
   const handleRemoveFromWatchlist = async (
@@ -117,6 +123,8 @@ export default function MyWatchlistPage() {
       setWatchlistItems((prevItems) =>
         prevItems.filter((item) => item.stock_id !== stockIdToRemove)
       );
+      // 刷新側邊欄摘要
+      refreshWatchlist();
       toast({
         title: "成功",
         description: `${itemSymbol} 已從您的關注列表移除。`,

@@ -1,36 +1,40 @@
-// components/shared/Sidebar.jsx
-"use client"; // 因為可能有客戶端互動，例如點擊高亮
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
-  LayoutGrid, // Dashboard Icon
-  Search, // Stock Search Icon
-  Star, // My Watchlist Icon
-  Briefcase, // My Portfolios Icon
-  UserCircle, // User Account Icon
-  HelpCircle, // Help/FAQ Icon
-  TrendingUp, // Logo Icon (代替了 Package2)
-  ChevronUp, // 用於漲幅
-  ChevronDown, // 用於跌幅
+  LayoutGrid,
+  Search,
+  Star,
+  Briefcase,
+  UserCircle,
+  HelpCircle,
+  TrendingUp,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
-import { cn } from "@/lib/utils"; // Shadcn UI utility
-
-// 模擬的關注列表摘要數據 (之後會從 API 獲取)
-const mockWatchlistSummary = [
-  { ticker: "AAPL", price: "$170.34", change: "+1.25%", isUp: true },
-  {
-    ticker: "2330",
-    name: "台積電",
-    price: "NT$600.00",
-    change: "-0.83%",
-    isUp: false,
-  },
-  { ticker: "GOOGL", price: "$2700.50", change: "+0.50%", isUp: true },
-];
+import { cn } from "@/lib/utils";
+import { useWatchlist } from "@/contexts/WatchlistContext";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const { watchlistSummary, isLoading } = useWatchlist();
+
+  // 格式化價格顯示
+  const formatPrice = (price, currency) => {
+    if (!price || price === 0) return "N/A";
+    const symbol = currency === "USD" ? "$" : "NT$";
+    return `${symbol}${price.toFixed(2)}`;
+  };
+
+  // 格式化漲跌幅
+  const formatChange = (changePercent, isUp) => {
+    if (!changePercent && changePercent !== 0) return "0.00%";
+    const sign = isUp ? "+" : "";
+    return `${sign}${changePercent.toFixed(2)}%`;
+  };
 
   const mainNavItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -60,38 +64,61 @@ export default function Sidebar() {
 
       <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
         {/* MY WATCHLIST SUMMARY */}
-        <div className="space-y-1">
-          <h3 className="px-2 text-xs font-semibold uppercase text-slate-500 tracking-wider">
-            My Watchlist Summary
-          </h3>
-          {mockWatchlistSummary.map((item) => (
-            <Link
-              key={item.ticker}
-              href={`/stocks/${item.ticker}`} // 假設股票詳細頁路由是 /stocks/[ticker]
-              className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-slate-700/50"
-            >
-              <div>
-                <span className="font-medium text-slate-200">
-                  {item.ticker}
-                </span>
-                {item.name && (
-                  <span className="ml-1 text-xs text-slate-400">
-                    ({item.name})
+        {session?.user && (
+          <div className="space-y-1">
+            <h3 className="px-2 text-xs font-semibold uppercase text-slate-500 tracking-wider">
+              關注列表摘要
+            </h3>
+            {isLoading ? (
+              <div className="px-2 py-2 text-xs text-slate-400">載入中...</div>
+            ) : watchlistSummary.length > 0 ? (
+              watchlistSummary.map((item) => (
+                <Link
+                  key={item.symbol}
+                  href={`/stocks/${item.symbol}`}
+                  className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-slate-700/50"
+                >
+                  <div>
+                    <span className="font-medium text-slate-200">
+                      {item.symbol}
+                    </span>
+                    {item.name && (
+                      <span className="ml-1 text-xs text-slate-400 truncate block max-w-[120px]">
+                        {item.name}
+                      </span>
+                    )}
+                    <p className="text-xs text-slate-400">
+                      {formatPrice(item.current_price, item.currency)}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "text-xs font-semibold flex items-center",
+                      item.is_up ? "text-green-400" : "text-red-400"
+                    )}
+                  >
+                    {item.is_up ? (
+                      <ChevronUp className="h-3 w-3" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" />
+                    )}
+                    {formatChange(item.change_percent, item.is_up)}
                   </span>
-                )}
-                <p className="text-xs text-slate-400">{item.price}</p>
+                </Link>
+              ))
+            ) : (
+              <div className="px-2 py-2 text-xs text-slate-400">
+                尚無關注股票
+                <Link
+                  href="/watchlist"
+                  className="block text-blue-400 hover:underline mt-1"
+                >
+                  前往新增
+                </Link>
               </div>
-              <span
-                className={cn(
-                  "text-xs font-semibold",
-                  item.isUp ? "text-green-400" : "text-red-400"
-                )}
-              >
-                {item.change}
-              </span>
-            </Link>
-          ))}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* MAIN NAVIGATION */}
         <div className="space-y-1">

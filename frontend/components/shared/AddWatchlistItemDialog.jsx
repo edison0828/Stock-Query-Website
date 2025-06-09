@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast"; // 確保路徑正確
 import { debounce } from "lodash";
+import { useWatchlist } from "@/contexts/WatchlistContext";
 
 export default function AddWatchlistItemDialog({
   isOpen,
@@ -34,6 +35,9 @@ export default function AddWatchlistItemDialog({
   const [isAddingStock, setIsAddingStock] = useState(null);
   const [addedStockIds, setAddedStockIds] = useState(new Set());
   const { toast } = useToast();
+
+  // 使用 Context 中的 refreshWatchlist 函數
+  const { refreshWatchlist } = useWatchlist();
 
   const debouncedSearch = useCallback(
     debounce(async (query) => {
@@ -136,6 +140,10 @@ export default function AddWatchlistItemDialog({
           title: "成功",
           description: `${stock.symbol} 已成功加入您的關注列表。`,
         });
+
+        // 刷新側邊欄摘要
+        refreshWatchlist();
+
         if (onWatchlistUpdate) {
           onWatchlistUpdate();
         }

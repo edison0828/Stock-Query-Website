@@ -280,3 +280,147 @@ export async function POST(request) {
     );
   }
 }
+
+// 更新投資組合
+export async function PUT(request, { params }) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user || !session.user.id) {
+    return NextResponse.json({ error: "未授權：需要登入" }, { status: 401 });
+  }
+
+  try {
+    const { portfolioId } = await params;
+    const userIdAsBigInt = BigInt(session.user.id);
+    const body = await request.json();
+    const { portfolio_name, description } = body;
+
+    if (!portfolio_name?.trim()) {
+      return NextResponse.json(
+        { error: "投資組合名稱為必填" },
+        { status: 400 }
+      );
+    }
+
+    // 檢查投資組合是否存在且屬於該用戶
+    const existingPortfolio = await prisma.portfolios.findFirst({
+      where: {
+        portfolio_id: BigInt(portfolioId),
+        user_id: userIdAsBigInt,
+      },
+    });
+
+    if (!existingPortfolio) {
+      return NextResponse.json(
+        { error: "投資組合不存在或無權限修改" },
+        { status: 404 }
+      );
+    }
+
+    // 檢查是否有重複的名稱（排除當前投資組合）
+    const duplicatePortfolio = await prisma.portfolios.findFirst({
+      where: {
+        user_id: userIdAsBigInt,
+        portfolio_name: portfolio_name.trim(),
+        portfolio_id: {
+          not: BigInt(portfolioId),
+        },
+      },
+    });
+
+    if (duplicatePortfolio) {
+      return NextResponse.json(
+        { error: "投資組合名稱已存在" },
+        { status: 409 }
+      );
+    }
+
+    // 更新投資組合
+    const updatedPortfolio = await prisma.portfolios.update({
+      where: {
+        portfolio_id: BigInt(portfolioId),
+      },
+      data: {
+        portfolio_name: portfolio_name.trim(),
+        description: description?.trim() || null,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        id: `pf${Number(updatedPortfolio.portfolio_id)}`,
+        portfolio_id: Number(updatedPortfolio.portfolio_id),
+        name: updatedPortfolio.portfolio_name,
+        description: updatedPortfolio.description,
+        created_at: updatedPortfolio.created_at,
+        message: "投資組合更新成功",
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("更新投資組合失敗:", error);
+    return NextResponse.json(
+      { error: "更新投資組合時發生錯誤" },
+      { status: 500 }
+    );
+  }
+}
+
+// 刪除投資組合
+export async function DELETE(request, { params }) {
+  const session = await getServerSession(authOptions);
+
+  if (!session || !session.user || !session.user.id) {
+    return NextResponse.json({ error: "未授權：需要登入" }, { status: 401 });
+  }
+
+  try {
+    const { portfolioId } = await params;
+    const userIdAsBigInt = BigInt(session.user.id);
+
+    // 檢查投資組合是否存在且屬於該用戶
+    const existingPortfolio = await prisma.portfolios.findFirst({
+      where: {
+        portfolio_id: BigInt(portfolioId),
+        user_id: userIdAsBigInt,
+      },
+      include: {
+        transactions: true,
+      },
+    });
+
+    if (!existingPortfolio) {
+      return NextResponse.json(
+        { error: "投資組合不存在或無權限刪除" },
+        { status: 404 }
+      );
+    }
+
+    // 如果有交易記錄，先刪除交易記錄
+    if (existingPortfolio.transactions.length > 0) {
+      await prisma.transactions.deleteMany({
+        where: {
+          portfolio_id: BigInt(portfolioId),
+        },
+      });
+    }
+
+    // 刪除投資組合
+    await prisma.portfolios.delete({
+      where: {
+        portfolio_id: BigInt(portfolioId),
+      },
+    });
+
+    return NextResponse.json(
+      { message: "投資組合刪除成功" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("刪除投資組合失敗:", error);
+    return NextResponse.json(
+      { error: "刪除投資組合時發生錯誤" },
+      { status: 500 }
+    );
+  }
+}
