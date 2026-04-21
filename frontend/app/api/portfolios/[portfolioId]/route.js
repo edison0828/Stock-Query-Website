@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import {
+  PortfolioPriceService,
+  toPortfolioEntity,
+} from "@/lib/domain/portfolio";
+
+const priceService = new PortfolioPriceService(prisma);
 
 // 處理 portfolioId 格式的輔助函數
 function parsePortfolioId(portfolioId) {
@@ -57,70 +63,11 @@ export async function GET(request, { params }) {
       );
     }
 
-    // 計算持倉和總價值
-    const holdings = {};
-    let totalValue = 0;
-    let totalCost = 0;
-
-    // 整理持倉
-    portfolio.transactions.forEach((transaction) => {
-      const stockId = transaction.stock_id;
-      if (!holdings[stockId]) {
-        holdings[stockId] = {
-          stock_id: stockId,
-          symbol: stockId,
-          name: transaction.stocks.company_name,
-          quantity: 0,
-          totalCost: 0,
-          avgPrice: 0,
-          currency: transaction.currency,
-        };
-      }
-
-      const quantity = Number(transaction.quantity);
-      const price = Number(transaction.price_per_share);
-
-      if (transaction.transaction_type === "BUY") {
-        holdings[stockId].quantity += quantity;
-        holdings[stockId].totalCost += quantity * price;
-      } else if (transaction.transaction_type === "SELL") {
-        holdings[stockId].quantity -= quantity;
-        holdings[stockId].totalCost -= quantity * price;
-      }
-    });
-
-    // 計算平均價格和當前價值
-    const holdingsArray = [];
-    for (const [stockId, holding] of Object.entries(holdings)) {
-      if (holding.quantity > 0) {
-        holding.avgPrice = holding.totalCost / holding.quantity;
-
-        try {
-          // 獲取最新價格
-          const latestPrice = await prisma.historicalprices.findFirst({
-            where: { stock_id: stockId },
-            orderBy: { date: "desc" },
-            select: { close_price: true },
-          });
-
-          if (latestPrice) {
-            const currentPrice = Number(latestPrice.close_price);
-            holding.currentPrice = currentPrice;
-            holding.currentValue = holding.quantity * currentPrice;
-            holding.unrealizedPnl = holding.currentValue - holding.totalCost;
-            holding.unrealizedPnlPercent =
-              (holding.unrealizedPnl / holding.totalCost) * 100;
-
-            totalValue += holding.currentValue;
-            totalCost += holding.totalCost;
-          }
-        } catch (error) {
-          console.error(`獲取 ${stockId} 價格失敗:`, error);
-        }
-
-        holdingsArray.push(holding);
-      }
-    }
+    const portfolioEntity = toPortfolioEntity(portfolio);
+    const latestPrices = await priceService.getLatestClosePrices(
+      portfolioEntity.getStockIds()
+    );
+    const snapshot = portfolioEntity.createSnapshot(latestPrices);
 
     // 格式化交易記錄
     const formattedTransactions = portfolio.transactions.map((transaction) => ({
@@ -143,13 +90,26 @@ export async function GET(request, { params }) {
       description: portfolio.description,
       created_at: portfolio.created_at,
       summary: {
-        total_market_value: totalValue,
-        total_cost_basis: totalCost,
-        unrealized_pnl: totalValue - totalCost,
-        unrealized_pnl_percent:
-          totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0,
+        total_market_value: snapshot.summary.totalMarketValue,
+        total_cost_basis: snapshot.summary.totalCostBasis,
+        unrealized_pnl: snapshot.summary.unrealizedPnl,
+        unrealized_pnl_percent: snapshot.summary.unrealizedPnlPercent,
+        realized_pnl: snapshot.summary.realizedPnl,
       },
-      holdings: holdingsArray,
+      holdings: snapshot.holdings.map((holding) => ({
+        stock_id: holding.stockId,
+        symbol: holding.symbol,
+        name: holding.name,
+        quantity: holding.quantity,
+        totalCost: holding.totalCost,
+        avgPrice: holding.avgPrice,
+        currentPrice: holding.currentPrice,
+        currentValue: holding.currentValue,
+        realizedPnl: holding.realizedPnl,
+        unrealizedPnl: holding.unrealizedPnl,
+        unrealizedPnlPercent: holding.unrealizedPnlPercent,
+        currency: holding.currency,
+      })),
       transactions: formattedTransactions,
     };
 

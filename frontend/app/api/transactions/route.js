@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import {
+  PortfolioDomainError,
+  TransactionValidator,
+  toPortfolioEntity,
+} from "@/lib/domain/portfolio";
 
 export async function POST(request) {
   const session = await getServerSession(authOptions);
@@ -13,43 +18,18 @@ export async function POST(request) {
   try {
     const userIdAsBigInt = BigInt(session.user.id);
     const body = await request.json();
-    const {
-      stock_id,
-      portfolio_id,
-      transaction_type,
-      quantity,
-      price_per_share,
-    } = body;
-
-    // 驗證請求數據
-    if (
-      !stock_id ||
-      !portfolio_id ||
-      !transaction_type ||
-      !quantity ||
-      !price_per_share
-    ) {
-      return NextResponse.json(
-        { error: "缺少必要的交易資訊" },
-        { status: 400 }
-      );
-    }
-
-    if (!["BUY", "SELL"].includes(transaction_type)) {
-      return NextResponse.json({ error: "無效的交易類型" }, { status: 400 });
-    }
-
-    if (quantity <= 0 || price_per_share <= 0) {
-      return NextResponse.json(
-        { error: "數量和價格必須大於 0" },
-        { status: 400 }
-      );
-    }
+    const transactionInput = TransactionValidator.normalizeInput({
+      stockId: body.stock_id,
+      portfolioId: body.portfolio_id,
+      transactionType: body.transaction_type,
+      quantity: body.quantity,
+      pricePerShare: body.price_per_share,
+    });
 
     // 驗證投資組合是否屬於當前用戶
     const portfolio = await prisma.portfolios.findFirst({
       where: {
-        portfolio_id: BigInt(portfolio_id),
+        portfolio_id: BigInt(transactionInput.portfolioId),
         user_id: userIdAsBigInt,
       },
     });
@@ -63,70 +43,52 @@ export async function POST(request) {
 
     // 驗證股票是否存在
     const stock = await prisma.stocks.findUnique({
-      where: { stock_id },
+      where: { stock_id: transactionInput.stockId },
       select: { stock_id: true, company_name: true, currency: true },
     });
 
     if (!stock) {
       return NextResponse.json(
-        { error: `找不到股票代號 ${stock_id}` },
+        { error: `找不到股票代號 ${transactionInput.stockId}` },
         { status: 404 }
       );
     }
 
-    // 如果是賣出交易，檢查庫存是否足夠
-    if (transaction_type === "SELL") {
-      // 獲取該投資組合中該股票的所有交易記錄
-      const transactions = await prisma.transactions.findMany({
-        where: {
-          portfolio_id: BigInt(portfolio_id),
-          stock_id: stock_id,
-        },
-        select: {
-          transaction_type: true,
-          quantity: true,
-        },
-      });
-
-      // 計算當前持有數量
-      let currentHolding = 0;
-      transactions.forEach((transaction) => {
-        if (transaction.transaction_type === "BUY") {
-          currentHolding += Number(transaction.quantity);
-        } else if (transaction.transaction_type === "SELL") {
-          currentHolding -= Number(transaction.quantity);
-        }
-      });
-
-      console.log(`股票 ${stock_id} 當前持有數量:`, currentHolding);
-      console.log(`嘗試賣出數量:`, quantity);
-
-      // 檢查是否有足夠的股票可以賣出
-      if (currentHolding < quantity) {
-        return NextResponse.json(
-          {
-            error: `庫存不足：您目前持有 ${currentHolding} 股 ${stock_id}，無法賣出 ${quantity} 股`,
-            current_holding: currentHolding,
-            requested_quantity: quantity,
+    const existingTransactions = await prisma.transactions.findMany({
+      where: {
+        portfolio_id: BigInt(transactionInput.portfolioId),
+      },
+      include: {
+        stocks: {
+          select: {
+            company_name: true,
           },
-          { status: 400 }
-        );
-      }
+        },
+      },
+      orderBy: {
+        transaction_date: "asc",
+      },
+    });
 
-      // 如果庫存剛好等於賣出數量，提醒用戶將完全清空該股票
-      if (currentHolding === quantity) {
-        console.log(`將完全賣出股票 ${stock_id}`);
-      }
-    }
+    const portfolioEntity = toPortfolioEntity({
+      ...portfolio,
+      transactions: existingTransactions,
+    });
+    const pendingTransaction = TransactionValidator.createPendingTransaction(
+      transactionInput,
+      stock
+    );
+
+    TransactionValidator.assertCanRecord(portfolioEntity, pendingTransaction);
 
     // 創建交易記錄
     const transaction = await prisma.transactions.create({
       data: {
-        portfolio_id: BigInt(portfolio_id),
-        stock_id: stock_id,
-        transaction_type: transaction_type,
-        quantity: quantity,
-        price_per_share: price_per_share,
+        portfolio_id: BigInt(transactionInput.portfolioId),
+        stock_id: transactionInput.stockId,
+        transaction_type: transactionInput.transactionType,
+        quantity: transactionInput.quantity,
+        price_per_share: transactionInput.pricePerShare,
         commission: 0, // 模擬交易，手續費為 0
         currency: stock.currency,
       },
@@ -167,6 +129,16 @@ export async function POST(request) {
       { status: 201 }
     );
   } catch (error) {
+    if (error instanceof PortfolioDomainError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          ...(error.details || {}),
+        },
+        { status: error.status }
+      );
+    }
+
     console.error("創建交易記錄失敗:", error);
     return NextResponse.json(
       { error: "創建交易記錄時發生錯誤" },
