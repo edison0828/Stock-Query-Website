@@ -96,22 +96,36 @@ Stock-Query-Website/
    NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
 
    DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DATABASE?connection_limit=5"
+   FINLAB_API_TOKEN=你的 FinLab VIP / API Token
    ```
 
    - 若未啟用 Google OAuth，可先留空 `GOOGLE_CLIENT_*`，但登入功能將僅限 Email/密碼。
    - `DATABASE_URL` 請替換為實際 MySQL 連線字串。
 
-4. **初始化資料庫**
+4. **初始化資料庫結構**
 
    ```bash
-   npx prisma generate           # 產生 Prisma Client
-   npx prisma migrate deploy     # 套用 prisma/migrations 既有結構
-   # 開發階段若需要重設資料，可使用 npx prisma migrate reset
+   npm run db:push
    ```
 
-   Prisma 會依 `prisma/schema.prisma` 建立 `users`、`stocks`、`transactions`、`watchlistitems` 等資料表。
+   目前 repo 內的 `prisma/migrations` 與 `prisma/schema.prisma` 並非完全同步；如果你是從零重建資料庫，請優先使用 `prisma db push`，不要直接用舊 migration 做 fresh bootstrap。
 
-5. **啟動開發伺服器**
+5. **用 FinLab 補回核心市場資料**
+
+   ```bash
+   npm run db:seed:finlab
+   ```
+
+   這支腳本會補回以下核心市場資料表：
+
+   - `stocks`
+   - `historicalprices`
+   - `financialreports`
+   - `dividends`
+
+   目前 `stocksplits` 會先保留空表，因為 FinLab 目前主要提供 ETF split 資料，和現有 generic schema 並不完全對應。
+
+6. **啟動開發伺服器**
 
    ```bash
    npm run dev
@@ -119,7 +133,7 @@ Stock-Query-Website/
 
    瀏覽器開啟 [http://localhost:3000](http://localhost:3000) 即可開始使用。修改 `app/page.jsx` 或其他檔案會自動觸發 HMR 更新。
 
-6. **建置與部署（選用）**
+7. **建置與部署（選用）**
    ```bash
    npm run build   # 建置生產版
    npm run start   # 啟動生產伺服器（需事先執行 build）
@@ -141,6 +155,8 @@ Stock-Query-Website/
 | --------------- | ---------------------------------------- |
 | `npm run dev`   | 啟動開發伺服器（使用 Next.js Turbopack） |
 | `npm run lint`  | 執行 ESLint，確保程式碼風格一致          |
+| `npm run db:push` | 依 `schema.prisma` 建立或同步資料庫結構 |
+| `npm run db:seed:finlab` | 使用 FinLab 重建核心市場資料 |
 | `npm run build` | 建置生產版本                             |
 | `npm run start` | 以生產模式啟動伺服器                     |
 

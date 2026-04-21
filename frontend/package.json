@@ -6,7 +6,10 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push && prisma generate",
+    "db:seed:finlab": "uv run --python 3.12 --with 'finlab>=1.5.9' --with pymysql python scripts/rebuild_finlab_market_data.py"
   },
   "dependencies": {
     "@prisma/client": "^6.8.2",
