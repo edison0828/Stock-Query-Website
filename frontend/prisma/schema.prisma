@@ -9,6 +9,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model alertrules {
+  alert_rule_id               BigInt          @id @default(autoincrement())
+  user_id                     BigInt
+  stock_id                    String          @db.VarChar(20)
+  rule_type                   alert_rule_type
+  threshold_value             Decimal         @db.Decimal(18, 6)
+  is_active                   Boolean         @default(true)
+  last_triggered_market_date  DateTime?       @db.Date
+  created_at                  DateTime        @default(now()) @db.Timestamp(0)
+  notifications               notifications[]
+  stocks                      stocks          @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_AlertRules_Stocks1")
+  users                       users           @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_AlertRules_Users1")
+
+  @@index([stock_id], map: "fk_AlertRules_Stocks1_idx")
+  @@index([user_id, is_active], map: "idx_alertrules_user_active")
+}
+
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model dividends {
   stock_id                String   @db.VarChar(20)
@@ -81,9 +98,11 @@ model stocks {
   security_status  String             @db.VarChar(255)
   transfer_agent   String             @db.VarChar(255)
   currency         String             @db.VarChar(10)
+  alertrules       alertrules[]
   dividends        dividends[]
   financialreports financialreports[]
   historicalprices historicalprices[]
+  notifications    notifications[]
   stocksplits      stocksplits[]
   transactions     transactions[]
   watchlistitems   watchlistitems[]
@@ -145,6 +164,8 @@ model users {
   last_login     DateTime?        @db.Timestamp(0)
   google_id      String?          @unique(map: "google_id") @db.VarChar(255)
   role           String           @default("user") @db.VarChar(255)
+  alertrules     alertrules[]
+  notifications  notifications[]
   portfolios     portfolios[]
   watchlistitems watchlistitems[]
 }
@@ -162,7 +183,32 @@ model watchlistitems {
   @@index([stock_id], map: "fk_WatchlistItems_Stocks1_idx")
 }
 
+model notifications {
+  notification_id BigInt      @id @default(autoincrement())
+  user_id         BigInt
+  alert_rule_id   BigInt?
+  stock_id        String      @db.VarChar(20)
+  title           String      @db.VarChar(255)
+  message         String      @db.Text
+  is_read         Boolean     @default(false)
+  created_at      DateTime    @default(now()) @db.Timestamp(0)
+  alertrules      alertrules? @relation(fields: [alert_rule_id], references: [alert_rule_id], onDelete: SetNull, map: "fk_Notifications_AlertRules1")
+  stocks          stocks      @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_Notifications_Stocks1")
+  users           users       @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_Notifications_Users1")
+
+  @@index([alert_rule_id], map: "fk_Notifications_AlertRules1_idx")
+  @@index([stock_id], map: "fk_Notifications_Stocks1_idx")
+  @@index([user_id, is_read, created_at(sort: Desc)], map: "idx_notifications_user_read_created")
+}
+
 enum transactions_transaction_type {
   BUY
   SELL
+}
+
+enum alert_rule_type {
+  PRICE_ABOVE
+  PRICE_BELOW
+  PERCENT_CHANGE_UP
+  PERCENT_CHANGE_DOWN
 }

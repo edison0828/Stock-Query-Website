@@ -18,6 +18,7 @@ import {
   Menu, // For mobile menu trigger
   Search,
   TrendingUp, // Logo Icon
+  Bell,
   LogOut, // Logout Icon
   Settings, // Settings Icon
   User, // Profile Icon
@@ -212,6 +213,13 @@ export default function Navbar({ user }) {
                 className="flex items-center gap-4 px-2.5 hover:text-slate-50"
               >
                 My Portfolios
+              </Link>
+              <Link
+                href="/alerts"
+                className="flex items-center gap-4 px-2.5 hover:text-slate-50"
+              >
+                <Bell className="h-4 w-4" />
+                Alerts
               </Link>
               <Link
                 href="/profile"

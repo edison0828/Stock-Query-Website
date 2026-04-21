@@ -8,6 +8,7 @@ import {
   Search,
   Star,
   Briefcase,
+  Bell,
   UserCircle,
   HelpCircle,
   TrendingUp,
@@ -41,6 +42,7 @@ export default function Sidebar() {
     { href: "/stocks", label: "Stock Search / List", icon: Search },
     { href: "/watchlist", label: "My Watchlist", icon: Star },
     { href: "/portfolios", label: "My Portfolios", icon: Briefcase },
+    { href: "/alerts", label: "Alerts", icon: Bell },
   ];
 
   const userAccountItems = [

@@ -1,9 +1,10 @@
 // app/(dashboard)/stocks/[symbol]/page.jsx
 "use client";
 
+import Link from "next/link";
 import TradeDialog from "@/components/shared/TradeDialog"; // 模擬買入賣出對話框的組件
 import { useState, useEffect, Suspense } from "react";
-import { useParams, useSearchParams } from "next/navigation"; // 用於獲取路由參數和查詢參數
+import { useParams } from "next/navigation"; // 用於獲取動態路由參數
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,6 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // 引入 Tabs
 import {
   Star,
+  Bell,
   ShoppingCart,
   DollarSign,
   TrendingUp,
@@ -218,6 +220,17 @@ function StockDetailPageContent() {
                   }`}
                 />
                 {isWatched ? "已關注" : "加入關注"}
+              </Button>
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="border-blue-500/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-blue-100"
+              >
+                <Link href={`/alerts?stock=${encodeURIComponent(stockSymbol)}`}>
+                  <Bell className="mr-2 h-4 w-4" />
+                  建立提醒
+                </Link>
               </Button>
               <Button
                 size="sm"
