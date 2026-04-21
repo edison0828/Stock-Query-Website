@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Star,
   Bell,
+  LineChart as BacktestIcon,
   ShoppingCart,
   DollarSign,
   TrendingUp,
@@ -230,6 +231,17 @@ function StockDetailPageContent() {
                 <Link href={`/alerts?stock=${encodeURIComponent(stockSymbol)}`}>
                   <Bell className="mr-2 h-4 w-4" />
                   建立提醒
+                </Link>
+              </Button>
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 hover:text-emerald-100"
+              >
+                <Link href={`/backtests?stock=${encodeURIComponent(stockSymbol)}`}>
+                  <BacktestIcon className="mr-2 h-4 w-4" />
+                  執行回測
                 </Link>
               </Button>
               <Button

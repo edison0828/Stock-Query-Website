@@ -19,6 +19,7 @@ import {
   Search,
   TrendingUp, // Logo Icon
   Bell,
+  LineChart,
   LogOut, // Logout Icon
   Settings, // Settings Icon
   User, // Profile Icon
@@ -220,6 +221,13 @@ export default function Navbar({ user }) {
               >
                 <Bell className="h-4 w-4" />
                 Alerts
+              </Link>
+              <Link
+                href="/backtests"
+                className="flex items-center gap-4 px-2.5 hover:text-slate-50"
+              >
+                <LineChart className="h-4 w-4" />
+                Backtests
               </Link>
               <Link
                 href="/profile"
