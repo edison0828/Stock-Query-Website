@@ -9,6 +9,7 @@ import {
   Star,
   Briefcase,
   Bell,
+  DatabaseZap,
   LineChart,
   UserCircle,
   HelpCircle,
@@ -52,6 +53,10 @@ export default function Sidebar() {
   ];
 
   const supportItems = [{ href: "/help", label: "Help/FAQ", icon: HelpCircle }];
+  const adminItems = [
+    { href: "/admin/market-data", label: "Market Data Admin", icon: DatabaseZap },
+  ];
+  const isAdmin = session?.user?.role === "admin";
 
   return (
     <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-slate-700 bg-slate-800 text-slate-300 sm:flex">
@@ -144,6 +149,28 @@ export default function Sidebar() {
             </Link>
           ))}
         </div>
+
+        {isAdmin && (
+          <div className="space-y-1">
+            <h3 className="px-2 text-xs font-semibold uppercase text-slate-500 tracking-wider">
+              Admin
+            </h3>
+            {adminItems.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-slate-300 transition-all hover:text-slate-50 hover:bg-slate-700",
+                  pathname === item.href &&
+                    "bg-slate-700 text-slate-50 font-medium"
+                )}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* USER ACCOUNT */}
         <div className="space-y-1">
