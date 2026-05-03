@@ -12,6 +12,7 @@ export const runtime = "nodejs";
 export const maxDuration = 1200;
 
 const ALLOWED_SCOPES = new Set(["TSE_OTC", "ALL"]);
+const ALLOWED_SOURCES = new Set(["AUTO", "FINLAB", "FREE"]);
 
 function errorResponse(error) {
   return NextResponse.json(
@@ -34,6 +35,7 @@ export async function POST(request) {
 
     const body = await request.json().catch(() => ({}));
     const scope = ALLOWED_SCOPES.has(body.scope) ? body.scope : "TSE_OTC";
+    const source = ALLOWED_SOURCES.has(body.source) ? body.source : "AUTO";
     const sections = {
       skipStocks: normalizeBoolean(body.skip_stocks),
       skipPrices: normalizeBoolean(body.skip_prices),
@@ -42,7 +44,7 @@ export async function POST(request) {
     };
 
     const syncJob = new MarketDataSyncJob();
-    const result = await syncJob.run({ scope, sections });
+    const result = await syncJob.run({ scope, source, sections });
 
     const statusService = new MarketDataStatusService(prisma);
     const status = await statusService.getCurrentStatus();

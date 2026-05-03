@@ -69,6 +69,7 @@ export default function AdminMarketDataClient() {
   const [status, setStatus] = useState(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [source, setSource] = useState("AUTO");
   const [scope, setScope] = useState("TSE_OTC");
   const [skipOptions, setSkipOptions] = useState({
     skip_stocks: false,
@@ -160,6 +161,7 @@ export default function AdminMarketDataClient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          source,
           scope,
           ...skipOptions,
         }),
@@ -201,7 +203,7 @@ export default function AdminMarketDataClient() {
               Admin
             </Badge>
             <Badge variant="outline" className="border-slate-600 text-slate-300">
-              FinLab
+              FinLab first + free fallback
             </Badge>
           </div>
           <h1 className="text-2xl font-semibold text-slate-50">
@@ -253,10 +255,24 @@ export default function AdminMarketDataClient() {
           <CardHeader>
             <CardTitle className="text-slate-50">執行同步</CardTitle>
             <CardDescription className="text-slate-400">
-              由管理員觸發既有 FinLab 匯入腳本。
+              預設優先使用 FinLab，沒有 token 時自動改用免費資料源。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label className="text-slate-300">資料來源</Label>
+              <Select value={source} onValueChange={setSource} disabled={isSyncing}>
+                <SelectTrigger className="border-slate-700 bg-slate-800 text-slate-100">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AUTO">Auto：FinLab 優先，免費來源備援</SelectItem>
+                  <SelectItem value="FINLAB">FinLab</SelectItem>
+                  <SelectItem value="FREE">免費來源：FinMind + TWSE + TPEx</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label className="text-slate-300">匯入範圍</Label>
               <Select value={scope} onValueChange={setScope} disabled={isSyncing}>
@@ -265,7 +281,7 @@ export default function AdminMarketDataClient() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="TSE_OTC">上市與上櫃</SelectItem>
-                  <SelectItem value="ALL">全部 FinLab 範圍</SelectItem>
+                  <SelectItem value="ALL">全部可用範圍</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -297,7 +313,8 @@ export default function AdminMarketDataClient() {
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <p>
                   完整同步可能需要較久時間，且需要伺服器環境具備
-                  `FINLAB_API_TOKEN`、`DATABASE_URL` 與 `uv`。
+                  `DATABASE_URL` 與 `uv`。Auto 模式有 `FINLAB_API_TOKEN`
+                  會使用 FinLab，否則使用免費來源。
                 </p>
               </div>
             </div>
@@ -327,7 +344,13 @@ export default function AdminMarketDataClient() {
           <CardContent className="space-y-4">
             {lastSyncResult ? (
               <>
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="rounded-md border border-slate-700 bg-slate-800/60 p-3">
+                    <p className="text-xs text-slate-500">來源</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-100">
+                      {lastSyncResult.source || "N/A"}
+                    </p>
+                  </div>
                   <div className="rounded-md border border-slate-700 bg-slate-800/60 p-3">
                     <p className="text-xs text-slate-500">Exit code</p>
                     <p className="mt-1 text-lg font-semibold text-slate-100">
@@ -357,6 +380,14 @@ export default function AdminMarketDataClient() {
                     {lastSyncResult.command}
                   </code>
                 </div>
+                {lastSyncResult.fallback_reason && (
+                  <div className="rounded-md border border-blue-500/30 bg-blue-500/10 p-3">
+                    <p className="text-xs text-blue-200">Fallback reason</p>
+                    <p className="mt-1 text-sm text-blue-100">
+                      {lastSyncResult.fallback_reason}
+                    </p>
+                  </div>
+                )}
                 <pre className="max-h-80 overflow-auto rounded-md border border-slate-700 bg-slate-950 p-4 text-xs text-slate-300">
                   {outputTail(lastSyncResult.stderr) ||
                     outputTail(lastSyncResult.stdout) ||

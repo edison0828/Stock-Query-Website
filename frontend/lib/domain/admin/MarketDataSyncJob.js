@@ -1,6 +1,11 @@
 import { spawn } from "child_process";
 
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
+const SOURCE_MODES = {
+  AUTO: "AUTO",
+  FINLAB: "FINLAB",
+  FREE: "FREE",
+};
 
 export class MarketDataSyncJob {
   constructor({
@@ -13,8 +18,22 @@ export class MarketDataSyncJob {
     this.command = command;
   }
 
-  buildArgs({ scope = "TSE_OTC", sections = {} } = {}) {
-    const args = ["run", "db:seed:finlab", "--", "--scope", scope];
+  hasFinLabToken() {
+    return Boolean(process.env.FINLAB_API_TOKEN);
+  }
+
+  resolveSource(source = SOURCE_MODES.AUTO) {
+    if (source === SOURCE_MODES.FINLAB || source === SOURCE_MODES.FREE) {
+      return source;
+    }
+
+    return this.hasFinLabToken() ? SOURCE_MODES.FINLAB : SOURCE_MODES.FREE;
+  }
+
+  buildArgsForSource({ scope = "TSE_OTC", sections = {}, source }) {
+    const scriptName =
+      source === SOURCE_MODES.FINLAB ? "db:seed:finlab" : "db:seed:free";
+    const args = ["run", scriptName, "--", "--scope", scope];
 
     if (sections.skipStocks) args.push("--skip-stocks");
     if (sections.skipPrices) args.push("--skip-prices");
@@ -24,8 +43,7 @@ export class MarketDataSyncJob {
     return args;
   }
 
-  run(options = {}) {
-    const args = this.buildArgs(options);
+  runCommand(args, resolvedSource) {
     const startedAt = new Date();
 
     return new Promise((resolve, reject) => {
@@ -62,6 +80,7 @@ export class MarketDataSyncJob {
         const finishedAt = new Date();
         const result = {
           command: [this.command, ...args].join(" "),
+          source: resolvedSource,
           code,
           stdout,
           stderr,
@@ -89,5 +108,49 @@ export class MarketDataSyncJob {
         resolve(result);
       });
     });
+  }
+
+  async run(options = {}) {
+    const requestedSource = options.source || SOURCE_MODES.AUTO;
+
+    if (requestedSource !== SOURCE_MODES.AUTO) {
+      const args = this.buildArgsForSource({
+        ...options,
+        source: requestedSource,
+      });
+      return this.runCommand(args, requestedSource);
+    }
+
+    if (!this.hasFinLabToken()) {
+      const args = this.buildArgsForSource({
+        ...options,
+        source: SOURCE_MODES.FREE,
+      });
+      const result = await this.runCommand(args, SOURCE_MODES.FREE);
+      return {
+        ...result,
+        fallback_reason: "FINLAB_API_TOKEN not configured",
+      };
+    }
+
+    const finlabArgs = this.buildArgsForSource({
+      ...options,
+      source: SOURCE_MODES.FINLAB,
+    });
+
+    try {
+      return await this.runCommand(finlabArgs, SOURCE_MODES.FINLAB);
+    } catch (finlabError) {
+      const freeArgs = this.buildArgsForSource({
+        ...options,
+        source: SOURCE_MODES.FREE,
+      });
+      const freeResult = await this.runCommand(freeArgs, SOURCE_MODES.FREE);
+      return {
+        ...freeResult,
+        fallback_reason: finlabError.message,
+        attempts: [finlabError.result].filter(Boolean),
+      };
+    }
   }
 }
