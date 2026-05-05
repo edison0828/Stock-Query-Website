@@ -195,20 +195,19 @@ async function getHistoricalPriceData(stockSymbol) {
 
     const latestDate = new Date(latestRecord.date);
 
-    // 計算最長的時間範圍（5年或 MAX）
-    const fiveYearsAgo = new Date(latestDate);
-    fiveYearsAgo.setDate(fiveYearsAgo.getDate() - 1825);
-
-    // 一次性獲取所有需要的歷史數據
+    // 一次性獲取所有歷史數據，讓 MAX 代表完整可用期間。
     const allPrices = await prisma.historicalprices.findMany({
       where: {
         stock_id: stockSymbol,
-        date: { gte: fiveYearsAgo }, // 或者不設限制如果要 MAX
       },
       orderBy: { date: "asc" },
       select: {
         date: true,
+        open_price: true,
+        high_price: true,
+        low_price: true,
         close_price: true,
+        volume: true,
       },
     });
 
@@ -241,6 +240,12 @@ async function getHistoricalPriceData(stockSymbol) {
 
       historicalData[range] = filteredPrices.map((price) => ({
         date: formatDateForChart(price.date, range),
+        time: formatDateForSeries(price.date),
+        open: toNullableNumber(price.open_price),
+        high: toNullableNumber(price.high_price),
+        low: toNullableNumber(price.low_price),
+        close: toNullableNumber(price.close_price),
+        volume: toNullableNumber(price.volume),
         price: price.close_price ? Number(price.close_price) : 0,
       }));
     }
@@ -342,6 +347,18 @@ function formatDate(date) {
 
 function formatDateTime(date) {
   return new Date(date).toLocaleString("zh-TW");
+}
+
+function formatDateForSeries(date) {
+  const d = new Date(date);
+  const month = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+function toNullableNumber(value) {
+  if (value === null || value === undefined) return null;
+  return Number(value);
 }
 
 function formatDateForChart(date, range) {

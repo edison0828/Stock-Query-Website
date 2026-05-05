@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import TradeDialog from "@/components/shared/TradeDialog"; // 模擬買入賣出對話框的組件
+import CandlestickChart from "@/components/stocks/CandlestickChart";
 import { useState, useEffect, Suspense } from "react";
 import { useParams } from "next/navigation"; // 用於獲取動態路由參數
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
   Star,
   Bell,
   LineChart as BacktestIcon,
+  CandlestickChart as CandlestickIcon,
   ShoppingCart,
   DollarSign,
   TrendingUp,
@@ -69,6 +71,7 @@ function StockDetailPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState("1M"); // 預設時間區間
+  const [selectedChartType, setSelectedChartType] = useState("candlestick");
   const [isWatched, setIsWatched] = useState(false); // 模擬關注狀態
   const [isTradeDialogOpen, setIsTradeDialogOpen] = useState(false); // 模擬交易對話框狀態
   const [tradeDialogAction, setTradeDialogAction] = useState("BUY"); // 模擬交易動作
@@ -293,69 +296,104 @@ function StockDetailPageContent() {
       {/* 歷史價格圖表 */}
       <Card className="bg-slate-800 border-slate-700 text-slate-200">
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <CardTitle className="text-xl font-semibold text-slate-100 mb-2 sm:mb-0">
               歷史價格圖表
             </CardTitle>
-            <div className="flex flex-wrap gap-1">
-              {timeRanges.map((range) => (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-md border border-slate-600 bg-slate-900/40 p-1">
                 <Button
-                  key={range}
-                  variant={selectedTimeRange === range ? "default" : "outline"}
-                  size="xs" // Smaller buttons
-                  onClick={() => setSelectedTimeRange(range)}
+                  type="button"
+                  variant={
+                    selectedChartType === "candlestick" ? "default" : "ghost"
+                  }
+                  size="sm"
+                  onClick={() => setSelectedChartType("candlestick")}
                   className={
-                    selectedTimeRange === range
-                      ? "bg-blue-600 hover:bg-blue-700 text-white"
-                      : "border-slate-600 bg-slate-700 hover:bg-slate-600 text-slate-200"
+                    selectedChartType === "candlestick"
+                      ? "h-8 bg-blue-600 px-3 text-white hover:bg-blue-700"
+                      : "h-8 px-3 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
                   }
                 >
-                  {range}
+                  <CandlestickIcon className="mr-2 h-4 w-4" />
+                  K線
                 </Button>
-              ))}
+                <Button
+                  type="button"
+                  variant={selectedChartType === "line" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setSelectedChartType("line")}
+                  className={
+                    selectedChartType === "line"
+                      ? "h-8 bg-blue-600 px-3 text-white hover:bg-blue-700"
+                      : "h-8 px-3 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                  }
+                >
+                  <BacktestIcon className="mr-2 h-4 w-4" />
+                  線圖
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {timeRanges.map((range) => (
+                  <Button
+                    key={range}
+                    variant={
+                      selectedTimeRange === range ? "default" : "outline"
+                    }
+                    size="xs" // Smaller buttons
+                    onClick={() => setSelectedTimeRange(range)}
+                    className={
+                      selectedTimeRange === range
+                        ? "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "border-slate-600 bg-slate-700 hover:bg-slate-600 text-slate-200"
+                    }
+                  >
+                    {range}
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="h-[300px] md:h-[400px] p-2 md:p-4">
-          {" "}
-          {/* 給圖表一個固定高度 */}
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={currentChartData}
-              margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
-            >
-              {" "}
-              {/* 調整 margin */}
-              <CartesianGrid strokeDasharray="3 3" stroke="#475569" />{" "}
-              {/* 格線顏色 */}
-              <XAxis dataKey="date" stroke="#94A3B8" tick={{ fontSize: 12 }} />
-              <YAxis
-                stroke="#94A3B8"
-                tickFormatter={(value) => `$${value.toFixed(0)}`}
-                tick={{ fontSize: 12 }}
-                domain={["auto", "auto"]}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "rgba(30, 41, 59, 0.9)",
-                  border: "1px solid #475569",
-                  borderRadius: "0.375rem",
-                }}
-                labelStyle={{ color: "#CBD5E1", fontWeight: "bold" }}
-                itemStyle={{ color: "#94A3B8" }}
-              />
-              <Legend wrapperStyle={{ color: "#E2E8F0" }} />
-              <Line
-                type="monotone"
-                dataKey="price"
-                name="Stock Price"
-                stroke="#3B82F6"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {selectedChartType === "candlestick" ? (
+            <CandlestickChart data={currentChartData} />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={currentChartData}
+                margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                <XAxis dataKey="date" stroke="#94A3B8" tick={{ fontSize: 12 }} />
+                <YAxis
+                  stroke="#94A3B8"
+                  tickFormatter={(value) => `$${value.toFixed(0)}`}
+                  tick={{ fontSize: 12 }}
+                  domain={["auto", "auto"]}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "rgba(30, 41, 59, 0.9)",
+                    border: "1px solid #475569",
+                    borderRadius: "0.375rem",
+                  }}
+                  labelStyle={{ color: "#CBD5E1", fontWeight: "bold" }}
+                  itemStyle={{ color: "#94A3B8" }}
+                />
+                <Legend wrapperStyle={{ color: "#E2E8F0" }} />
+                <Line
+                  type="monotone"
+                  dataKey="price"
+                  name="Stock Price"
+                  stroke="#3B82F6"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
       {/* 資訊頁籤 */}
