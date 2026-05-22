@@ -44,7 +44,8 @@
 ### 管理員市場資料維護
 
 - 管理員可在後台查看 `stocks`、`historicalprices`、`financialreports`、`dividends` 與 `stocksplits` 的資料量與最新日期。
-- 後台同步支援 FinLab 優先與免費來源備援，也可選擇上市上櫃或全部可用範圍。
+- 後台同步支援 FinLab 優先與免費來源備援，也可選擇上市上櫃、ETF 或全部可用範圍。
+- 每次同步會保留工作紀錄，並在完成後產生資料品質快照，協助檢查缺價格、價格日期落後、長期標的資料過少與名稱缺漏。
 <!-- > 提示：若需儲存在 Git LFS 或 CDN，可將 Markdown 圖片路徑替換為實際連結，確保 README 顯示正常。 -->
 
 ## 系統架構與技術
@@ -131,7 +132,13 @@ Stock-Query-Website/
    - `financialreports`
    - `dividends`
 
-   預設 `scope` 是 `TSE_OTC`，會匯入上市與上櫃股票。若要包含 ETF 與其他 FinLab 可用標的，請使用：
+   預設 `scope` 是 `TSE_OTC`，會匯入上市與上櫃股票。若只要補 ETF，可使用：
+
+   ```bash
+   npm run db:seed:finlab -- --scope ETF
+   ```
+
+   若要包含 ETF 與其他 FinLab 可用標的，請使用：
 
    ```bash
    npm run db:seed:finlab -- --scope ALL
@@ -155,7 +162,7 @@ Stock-Query-Website/
 
 6. **後台同步市場資料（選用）**
 
-   登入管理員帳號後可進入「市場資料維護」頁面，由 API 執行同步工作。同步模式支援：
+   登入管理員帳號後可進入「市場資料維護」頁面，由 API 執行同步工作，並查看最近同步紀錄與資料品質快照。同步模式支援：
 
    - `AUTO`：有 `FINLAB_API_TOKEN` 時優先使用 FinLab，失敗或未設定 token 時改用免費來源。
    - `FINLAB`：強制使用 FinLab。
@@ -195,6 +202,7 @@ Stock-Query-Website/
 | `npm run lint`  | 執行 ESLint，確保程式碼風格一致          |
 | `npm run db:push` | 依 `schema.prisma` 建立或同步資料庫結構 |
 | `npm run db:seed:finlab` | 使用 FinLab 匯入核心市場資料，預設範圍為上市與上櫃 |
+| `npm run db:seed:finlab -- --scope ETF` | 使用 FinLab 只匯入 ETF |
 | `npm run db:seed:finlab -- --scope ALL` | 使用 FinLab 匯入全部可用範圍，包含 ETF |
 | `npm run db:seed:free` | 使用 FinMind + TWSE + TPEx 免費來源匯入市場資料 |
 | `npm run build` | 建置生產版本                             |

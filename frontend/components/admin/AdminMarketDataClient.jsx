@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Database,
   FileText,
+  History,
   Loader2,
   Play,
   RefreshCcw,
@@ -64,6 +65,24 @@ function outputTail(value) {
   return value.split("\n").slice(-18).join("\n").trim();
 }
 
+function formatDateTime(value) {
+  if (!value) {
+    return "N/A";
+  }
+
+  return new Date(value).toLocaleString("zh-TW");
+}
+
+function severityClass(severity) {
+  if (severity === "critical") {
+    return "border-red-500/30 bg-red-500/10 text-red-200";
+  }
+  if (severity === "warning") {
+    return "border-amber-500/30 bg-amber-500/10 text-amber-100";
+  }
+  return "border-blue-500/30 bg-blue-500/10 text-blue-100";
+}
+
 export default function AdminMarketDataClient() {
   const { toast } = useToast();
   const [status, setStatus] = useState(null);
@@ -78,6 +97,9 @@ export default function AdminMarketDataClient() {
     skip_dividends: false,
   });
   const [lastSyncResult, setLastSyncResult] = useState(null);
+  const recentSyncJobs = status?.recent_sync_jobs || [];
+  const quality = status?.quality || { summary: {}, issues: [] };
+  const qualityIssueCount = quality.issues?.length || 0;
 
   const statusItems = useMemo(
     () => [
@@ -174,7 +196,11 @@ export default function AdminMarketDataClient() {
         throw error;
       }
 
-      setStatus(data.status);
+      setStatus({
+        ...data.status,
+        recent_sync_jobs: data.recent_sync_jobs || [],
+        quality: data.quality || { summary: {}, issues: [] },
+      });
       setLastSyncResult(data.result);
       toast({
         title: "同步完成",
@@ -280,7 +306,8 @@ export default function AdminMarketDataClient() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="TSE_OTC">上市與上櫃</SelectItem>
+                  <SelectItem value="TSE_OTC">上市上櫃股票</SelectItem>
+                  <SelectItem value="ETF">ETF</SelectItem>
                   <SelectItem value="ALL">全部可用範圍</SelectItem>
                 </SelectContent>
               </Select>
@@ -397,6 +424,146 @@ export default function AdminMarketDataClient() {
             ) : (
               <div className="flex min-h-64 items-center justify-center rounded-md border border-dashed border-slate-700 text-sm text-slate-500">
                 尚未執行同步
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card className="border-slate-700 bg-slate-900/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-50">
+              <History className="h-5 w-5 text-blue-300" />
+              同步紀錄
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              最近 10 次市場資料同步工作。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentSyncJobs.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="py-2 pr-3">狀態</th>
+                      <th className="py-2 pr-3">來源</th>
+                      <th className="py-2 pr-3">範圍</th>
+                      <th className="py-2 pr-3">開始時間</th>
+                      <th className="py-2 pr-3">耗時</th>
+                      <th className="py-2 pr-3">價格筆數</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentSyncJobs.map((job) => (
+                      <tr
+                        key={job.sync_job_id}
+                        className="border-b border-slate-800 text-slate-300 last:border-0"
+                      >
+                        <td className="py-3 pr-3">
+                          <Badge
+                            className={
+                              job.status === "SUCCESS"
+                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                                : job.status === "FAILED"
+                                  ? "border-red-500/30 bg-red-500/10 text-red-200"
+                                  : "border-blue-500/30 bg-blue-500/10 text-blue-200"
+                            }
+                          >
+                            {job.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 pr-3">
+                          {job.requested_source}
+                          {job.resolved_source
+                            ? ` -> ${job.resolved_source}`
+                            : ""}
+                        </td>
+                        <td className="py-3 pr-3">{job.scope}</td>
+                        <td className="py-3 pr-3">
+                          {formatDateTime(job.started_at)}
+                        </td>
+                        <td className="py-3 pr-3">
+                          {formatDuration(job.duration_ms)}
+                        </td>
+                        <td className="py-3 pr-3">
+                          {job.historical_price_rows === null
+                            ? "N/A"
+                            : formatCount(job.historical_price_rows)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="flex min-h-36 items-center justify-center rounded-md border border-dashed border-slate-700 text-sm text-slate-500">
+                尚無同步紀錄
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-700 bg-slate-900/70">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-50">
+              <AlertTriangle className="h-5 w-5 text-amber-300" />
+              資料品質
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              檢查缺價格、價格日期落後、長期標的資料過少與名稱缺漏。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                ["缺價格", quality.summary?.MISSING_PRICE_DATA || 0],
+                ["日期落後", quality.summary?.STALE_PRICE_DATE || 0],
+                ["名稱缺漏", quality.summary?.MISSING_COMPANY_NAME || 0],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-md border border-slate-700 bg-slate-800/60 p-3"
+                >
+                  <p className="text-xs text-slate-500">{label}</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-100">
+                    {formatCount(value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {qualityIssueCount > 0 ? (
+              <div className="max-h-[360px] space-y-2 overflow-auto pr-1">
+                {quality.issues.map((issue, index) => (
+                  <div
+                    key={`${issue.check_type}-${issue.stock_id || index}`}
+                    className="rounded-md border border-slate-700 bg-slate-800/60 p-3"
+                  >
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <Badge className={severityClass(issue.severity)}>
+                        {issue.severity}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="border-slate-600 text-slate-300"
+                      >
+                        {issue.check_type}
+                      </Badge>
+                      {issue.stock_id && (
+                        <span className="text-sm font-medium text-slate-100">
+                          {issue.stock_id}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-300">{issue.message}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex min-h-36 items-center justify-center rounded-md border border-dashed border-slate-700 text-sm text-slate-500">
+                目前沒有偵測到資料品質問題
               </div>
             )}
           </CardContent>

@@ -7,6 +7,31 @@ const SOURCE_MODES = {
   FREE: "FREE",
 };
 
+const SUMMARY_PREFIX = "[summary] ";
+
+function parseSummary(stdout) {
+  if (!stdout) {
+    return null;
+  }
+
+  const summaryLine = stdout
+    .split("\n")
+    .reverse()
+    .find((line) => line.startsWith(SUMMARY_PREFIX));
+
+  if (!summaryLine) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(summaryLine.slice(SUMMARY_PREFIX.length));
+  } catch (error) {
+    return {
+      parse_error: error.message,
+    };
+  }
+}
+
 export class MarketDataSyncJob {
   constructor({
     cwd = process.cwd(),
@@ -84,6 +109,7 @@ export class MarketDataSyncJob {
           code,
           stdout,
           stderr,
+          summary: parseSummary(stdout),
           started_at: startedAt.toISOString(),
           finished_at: finishedAt.toISOString(),
           duration_ms: finishedAt.getTime() - startedAt.getTime(),

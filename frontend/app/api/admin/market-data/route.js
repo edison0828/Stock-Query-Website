@@ -4,7 +4,9 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import prisma from "@/lib/prisma";
 import {
   AdminAuthorizationPolicy,
+  MarketDataQualityService,
   MarketDataStatusService,
+  MarketDataSyncHistoryService,
 } from "@/lib/domain/admin";
 
 export const runtime = "nodejs";
@@ -22,9 +24,19 @@ export async function GET() {
     new AdminAuthorizationPolicy(session).assertAdmin();
 
     const statusService = new MarketDataStatusService(prisma);
+    const syncHistoryService = new MarketDataSyncHistoryService(prisma);
+    const qualityService = new MarketDataQualityService(prisma);
     const status = await statusService.getCurrentStatus();
+    const [recentSyncJobs, quality] = await Promise.all([
+      syncHistoryService.listRecent(10),
+      qualityService.getLatestSnapshot(200),
+    ]);
 
-    return NextResponse.json(status.toJSON());
+    return NextResponse.json({
+      ...status.toJSON(),
+      recent_sync_jobs: recentSyncJobs,
+      quality,
+    });
   } catch (error) {
     if (!error.status || error.status >= 500) {
       console.error("Admin market data status failed:", error);

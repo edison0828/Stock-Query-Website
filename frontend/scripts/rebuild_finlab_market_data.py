@@ -72,9 +72,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--scope",
-        choices=["TSE_OTC", "ALL"],
+        choices=["TSE_OTC", "ETF", "ALL"],
         default="TSE_OTC",
-        help="FinLab universe scope to import. Default keeps the dataset smaller and aligned with the current UI filters.",
+        help="FinLab universe scope to import. Use ETF to refresh ETF history without rebuilding the full ALL universe.",
     )
     parser.add_argument(
         "--batch-size",
@@ -440,6 +440,13 @@ def execute_batches(
     return total
 
 
+def get_latest_price_date(connection: pymysql.connections.Connection) -> object:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT MAX(date) FROM historicalprices")
+        row = cursor.fetchone()
+    return row[0] if row else None
+
+
 def main() -> int:
     args = parse_args()
 
@@ -543,14 +550,18 @@ def main() -> int:
 
         if args.skip_stocks:
             print("[stocks] skipped")
+            stock_count = 0
         else:
-            execute_batches(connection, stock_sql, stock_rows, args.batch_size, "stocks")
+            stock_count = execute_batches(
+                connection, stock_sql, stock_rows, args.batch_size, "stocks"
+            )
 
         if args.skip_prices:
             print("[historicalprices] skipped")
+            historical_count = 0
         else:
             price_frames = get_price_frames(args.scope)
-            execute_batches(
+            historical_count = execute_batches(
                 connection,
                 historical_sql,
                 iter_historical_rows(stock_ids, price_frames),
@@ -560,9 +571,10 @@ def main() -> int:
 
         if args.skip_financials:
             print("[financialreports] skipped")
+            financial_count = 0
         else:
             financial_frames = get_financial_frames()
-            execute_batches(
+            financial_count = execute_batches(
                 connection,
                 financial_sql,
                 iter_financial_rows(stock_ids, financial_frames),
@@ -572,6 +584,7 @@ def main() -> int:
 
         if args.skip_dividends:
             print("[dividends] skipped")
+            dividend_count = 0
         else:
             tse_ids = [stock_id for stock_id in stock_ids if stock_id in market_id_sets["TSE"]]
             otc_ids = [stock_id for stock_id in stock_ids if stock_id in market_id_sets["OTC"]]
@@ -579,23 +592,42 @@ def main() -> int:
             tse_dividend_rows = build_dividend_rows(TSE_DIVIDEND_DATASETS, tse_ids)
             otc_dividend_rows = build_dividend_rows(OTC_DIVIDEND_DATASETS, otc_ids)
 
-            execute_batches(
+            tse_dividend_count = execute_batches(
                 connection,
                 dividend_sql,
                 tse_dividend_rows,
                 args.batch_size,
                 "dividends_tse",
             )
-            execute_batches(
+            otc_dividend_count = execute_batches(
                 connection,
                 dividend_sql,
                 otc_dividend_rows,
                 args.batch_size,
                 "dividends_otc",
             )
+            dividend_count = tse_dividend_count + otc_dividend_count
 
         print(
             "[stocksplits] skipped. FinLab currently exposes ETF split data only, which does not map cleanly to the current generic stocksplits schema."
+        )
+        latest_price_date = get_latest_price_date(connection)
+        print(
+            "[summary] "
+            + json.dumps(
+                {
+                    "source": "FINLAB",
+                    "scope": args.scope,
+                    "stocks": stock_count,
+                    "historicalprices": historical_count,
+                    "financialreports": financial_count,
+                    "dividends": dividend_count,
+                    "latest_price_date": latest_price_date.isoformat()
+                    if latest_price_date
+                    else None,
+                },
+                ensure_ascii=False,
+            )
         )
         print("[done] FinLab market data rebuild completed.")
         return 0

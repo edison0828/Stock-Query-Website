@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--scope",
-        choices=["TSE_OTC", "ALL"],
+        choices=["TSE_OTC", "ETF", "ALL"],
         default="TSE_OTC",
         help="Universe scope to import.",
     )
@@ -192,15 +192,22 @@ def load_company_data() -> Dict[str, dict]:
 
 
 def normalize_market_scope(records: Sequence[dict], scope: str) -> List[dict]:
-    allowed_types = {"twse", "tpex"} if scope == "TSE_OTC" else None
+    allowed_types = {"twse", "tpex"}
     rows = []
 
     for record in records:
         stock_id = str(record.get("stock_id") or "").strip()
         source_type = str(record.get("type") or "").strip().lower()
-        if not stock_id or not re.match(r"^\d{4}[A-Z]?$", stock_id):
+        industry_category = str(record.get("industry_category") or "").strip().upper()
+        is_etf = industry_category == "ETF"
+
+        if not stock_id or not re.match(r"^\d{4,6}[A-Z]?$", stock_id):
             continue
-        if allowed_types and source_type not in allowed_types:
+        if source_type not in allowed_types:
+            continue
+        if scope == "TSE_OTC" and is_etf:
+            continue
+        if scope == "ETF" and not is_etf:
             continue
         rows.append(record)
 
@@ -485,6 +492,13 @@ def execute_batches(
     return total
 
 
+def get_latest_price_date(connection: pymysql.connections.Connection) -> object:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT MAX(date) FROM historicalprices")
+        row = cursor.fetchone()
+    return row[0] if row else None
+
+
 def main() -> int:
     args = parse_args()
     load_env_file(Path(args.env_file))
@@ -579,15 +593,19 @@ def main() -> int:
 
         if args.skip_stocks:
             print("[stocks:free] skipped")
+            stock_count = 0
         else:
-            execute_batches(connection, stock_sql, stock_rows, args.batch_size, "stocks:free")
+            stock_count = execute_batches(
+                connection, stock_sql, stock_rows, args.batch_size, "stocks:free"
+            )
 
         if args.skip_prices:
             print("[historicalprices:free] skipped")
+            historical_count = 0
         else:
             price_rows = list(iter_twse_price_rows(allowed_stock_ids))
             price_rows.extend(iter_tpex_price_rows(allowed_stock_ids))
-            execute_batches(
+            historical_count = execute_batches(
                 connection,
                 historical_sql,
                 price_rows,
@@ -605,8 +623,9 @@ def main() -> int:
 
         if args.skip_financials or not fundamental_stock_ids:
             print("[financialreports:free] skipped")
+            financial_count = 0
         else:
-            execute_batches(
+            financial_count = execute_batches(
                 connection,
                 financial_sql,
                 fetch_financial_rows(
@@ -621,8 +640,9 @@ def main() -> int:
 
         if args.skip_dividends or not fundamental_stock_ids:
             print("[dividends:free] skipped")
+            dividend_count = 0
         else:
-            execute_batches(
+            dividend_count = execute_batches(
                 connection,
                 dividend_sql,
                 fetch_dividend_rows(
@@ -638,6 +658,24 @@ def main() -> int:
         print(
             "[stocksplits:free] skipped. Free fallback keeps the existing optional "
             "stocksplits table unchanged."
+        )
+        latest_price_date = get_latest_price_date(connection)
+        print(
+            "[summary] "
+            + json.dumps(
+                {
+                    "source": "FREE",
+                    "scope": args.scope,
+                    "stocks": stock_count,
+                    "historicalprices": historical_count,
+                    "financialreports": financial_count,
+                    "dividends": dividend_count,
+                    "latest_price_date": latest_price_date.isoformat()
+                    if latest_price_date
+                    else None,
+                },
+                ensure_ascii=False,
+            )
         )
         print("[done] Free market data rebuild completed.")
         return 0

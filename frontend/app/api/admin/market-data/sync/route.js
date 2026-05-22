@@ -4,14 +4,16 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import prisma from "@/lib/prisma";
 import {
   AdminAuthorizationPolicy,
+  MarketDataQualityService,
   MarketDataStatusService,
+  MarketDataSyncHistoryService,
   MarketDataSyncJob,
 } from "@/lib/domain/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 1200;
 
-const ALLOWED_SCOPES = new Set(["TSE_OTC", "ALL"]);
+const ALLOWED_SCOPES = new Set(["TSE_OTC", "ETF", "ALL"]);
 const ALLOWED_SOURCES = new Set(["AUTO", "FINLAB", "FREE"]);
 
 function errorResponse(error) {
@@ -19,6 +21,7 @@ function errorResponse(error) {
     {
       error: error.message || "市場資料同步失敗",
       result: error.result || null,
+      sync_record: error.syncRecord || null,
     },
     { status: error.status || 500 }
   );
@@ -43,16 +46,50 @@ export async function POST(request) {
       skipDividends: normalizeBoolean(body.skip_dividends),
     };
 
+    const syncHistoryService = new MarketDataSyncHistoryService(prisma);
+    const qualityService = new MarketDataQualityService(prisma);
+    const syncRecord = await syncHistoryService.start({
+      requestedSource: source,
+      scope,
+      sections,
+      userId: session.user?.id,
+    });
+
     const syncJob = new MarketDataSyncJob();
-    const result = await syncJob.run({ scope, source, sections });
+    let result;
+
+    try {
+      result = await syncJob.run({ scope, source, sections });
+      await syncHistoryService.complete(syncRecord.sync_job_id, result);
+    } catch (error) {
+      const failedRecord = await syncHistoryService.fail(
+        syncRecord.sync_job_id,
+        error
+      );
+      error.syncRecord = failedRecord;
+      throw error;
+    }
+
+    const qualityIssues = await qualityService.computeIssues({ limitPerCheck: 50 });
+    const persistedQuality = await qualityService.persistSnapshot({
+      syncJobId: syncRecord.sync_job_id,
+      issues: qualityIssues,
+    });
 
     const statusService = new MarketDataStatusService(prisma);
     const status = await statusService.getCurrentStatus();
+    const recentSyncJobs = await syncHistoryService.listRecent(10);
 
     return NextResponse.json({
       message: "市場資料同步完成",
       result,
       status: status.toJSON(),
+      sync_record: recentSyncJobs[0],
+      recent_sync_jobs: recentSyncJobs,
+      quality: {
+        summary: qualityService.summarize(persistedQuality),
+        issues: persistedQuality,
+      },
     });
   } catch (error) {
     if (!error.status || error.status >= 500) {

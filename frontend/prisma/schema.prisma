@@ -10,17 +10,17 @@ datasource db {
 }
 
 model alertrules {
-  alert_rule_id               BigInt          @id @default(autoincrement())
-  user_id                     BigInt
-  stock_id                    String          @db.VarChar(20)
-  rule_type                   alert_rule_type
-  threshold_value             Decimal         @db.Decimal(18, 6)
-  is_active                   Boolean         @default(true)
-  last_triggered_market_date  DateTime?       @db.Date
-  created_at                  DateTime        @default(now()) @db.Timestamp(0)
-  notifications               notifications[]
-  stocks                      stocks          @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_AlertRules_Stocks1")
-  users                       users           @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_AlertRules_Users1")
+  alert_rule_id              BigInt          @id @default(autoincrement())
+  user_id                    BigInt
+  stock_id                   String          @db.VarChar(20)
+  rule_type                  alert_rule_type
+  threshold_value            Decimal         @db.Decimal(18, 6)
+  is_active                  Boolean         @default(true)
+  last_triggered_market_date DateTime?       @db.Date
+  created_at                 DateTime        @default(now()) @db.Timestamp(0)
+  notifications              notifications[]
+  stocks                     stocks          @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_AlertRules_Stocks1")
+  users                      users           @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_AlertRules_Users1")
 
   @@index([stock_id], map: "fk_AlertRules_Stocks1_idx")
   @@index([user_id, is_active], map: "idx_alertrules_user_active")
@@ -92,12 +92,12 @@ model portfolios {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model stocks {
-  stock_id         String             @id @db.VarChar(20)
-  company_name     String             @db.VarChar(255)
-  market_type      String             @db.VarChar(255)
-  security_status  String             @db.VarChar(255)
-  transfer_agent   String             @db.VarChar(255)
-  currency         String             @db.VarChar(10)
+  stock_id         String                    @id @db.VarChar(20)
+  company_name     String                    @db.VarChar(255)
+  market_type      String                    @db.VarChar(255)
+  security_status  String                    @db.VarChar(255)
+  transfer_agent   String                    @db.VarChar(255)
+  currency         String                    @db.VarChar(10)
   alertrules       alertrules[]
   backtestruns     backtestruns[]
   dividends        dividends[]
@@ -107,6 +107,7 @@ model stocks {
   stocksplits      stocksplits[]
   transactions     transactions[]
   watchlistitems   watchlistitems[]
+  qualitychecks    marketdataqualitychecks[]
 
   @@index([company_name], map: "idx_stocks_company_name")
   @@index([market_type], map: "idx_stocks_market_type")
@@ -157,19 +158,70 @@ model transactions {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model users {
-  user_id        BigInt           @id @default(autoincrement())
-  username       String           @unique(map: "username_UNIQUE") @db.VarChar(100)
-  email          String           @unique(map: "email_UNIQUE") @db.VarChar(255)
-  password_hash  String?          @db.VarChar(255)
-  created_at     DateTime         @default(now()) @db.Timestamp(0)
-  last_login     DateTime?        @db.Timestamp(0)
-  google_id      String?          @unique(map: "google_id") @db.VarChar(255)
-  role           String           @default("user") @db.VarChar(255)
-  alertrules     alertrules[]
-  backtestruns    backtestruns[]
-  notifications  notifications[]
-  portfolios     portfolios[]
-  watchlistitems watchlistitems[]
+  user_id            BigInt               @id @default(autoincrement())
+  username           String               @unique(map: "username_UNIQUE") @db.VarChar(100)
+  email              String               @unique(map: "email_UNIQUE") @db.VarChar(255)
+  password_hash      String?              @db.VarChar(255)
+  created_at         DateTime             @default(now()) @db.Timestamp(0)
+  last_login         DateTime?            @db.Timestamp(0)
+  google_id          String?              @unique(map: "google_id") @db.VarChar(255)
+  role               String               @default("user") @db.VarChar(255)
+  alertrules         alertrules[]
+  backtestruns       backtestruns[]
+  marketdatasyncjobs marketdatasyncjobs[]
+  notifications      notifications[]
+  portfolios         portfolios[]
+  watchlistitems     watchlistitems[]
+}
+
+model marketdatasyncjobs {
+  sync_job_id           BigInt                    @id @default(autoincrement())
+  requested_source      String                    @db.VarChar(20)
+  resolved_source       String?                   @db.VarChar(20)
+  scope                 String                    @db.VarChar(20)
+  status                String                    @default("RUNNING") @db.VarChar(20)
+  started_at            DateTime                  @default(now()) @db.Timestamp(0)
+  finished_at           DateTime?                 @db.Timestamp(0)
+  duration_ms           BigInt?
+  command               String?                   @db.Text
+  skip_stocks           Boolean                   @default(false)
+  skip_prices           Boolean                   @default(false)
+  skip_financials       Boolean                   @default(false)
+  skip_dividends        Boolean                   @default(false)
+  stock_rows            BigInt?
+  historical_price_rows BigInt?
+  financial_report_rows BigInt?
+  dividend_rows         BigInt?
+  latest_price_date     DateTime?                 @db.Date
+  fallback_reason       String?                   @db.Text
+  stdout_tail           String?                   @db.Text
+  stderr_tail           String?                   @db.Text
+  error_message         String?                   @db.Text
+  created_by_user_id    BigInt?
+  users                 users?                    @relation(fields: [created_by_user_id], references: [user_id], onDelete: SetNull, map: "fk_MarketDataSyncJobs_Users1")
+  qualitychecks         marketdataqualitychecks[]
+
+  @@index([created_by_user_id], map: "fk_MarketDataSyncJobs_Users1_idx")
+  @@index([status, started_at(sort: Desc)], map: "idx_marketdatasyncjobs_status_started")
+  @@index([started_at(sort: Desc)], map: "idx_marketdatasyncjobs_started")
+}
+
+model marketdataqualitychecks {
+  quality_check_id   BigInt              @id @default(autoincrement())
+  sync_job_id        BigInt?
+  check_type         String              @db.VarChar(80)
+  stock_id           String?             @db.VarChar(20)
+  severity           String              @db.VarChar(20)
+  message            String              @db.Text
+  observed_value     String?             @db.Text
+  created_at         DateTime            @default(now()) @db.Timestamp(0)
+  marketdatasyncjobs marketdatasyncjobs? @relation(fields: [sync_job_id], references: [sync_job_id], onDelete: SetNull, map: "fk_MarketDataQualityChecks_SyncJobs1")
+  stocks             stocks?             @relation(fields: [stock_id], references: [stock_id], onDelete: SetNull, map: "fk_MarketDataQualityChecks_Stocks1")
+
+  @@index([sync_job_id], map: "fk_MarketDataQualityChecks_SyncJobs1_idx")
+  @@index([stock_id], map: "fk_MarketDataQualityChecks_Stocks1_idx")
+  @@index([check_type, severity], map: "idx_marketdataqualitychecks_type_severity")
+  @@index([created_at(sort: Desc)], map: "idx_marketdataqualitychecks_created")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -204,27 +256,27 @@ model notifications {
 }
 
 model backtestruns {
-  backtest_run_id       BigInt                 @id @default(autoincrement())
-  user_id               BigInt
-  stock_id              String                 @db.VarChar(20)
-  strategy_type         backtest_strategy_type
-  strategy_name         String                 @db.VarChar(100)
-  start_date            DateTime               @db.Date
-  end_date              DateTime               @db.Date
-  initial_capital       Decimal                @db.Decimal(18, 6)
-  final_value           Decimal                @db.Decimal(18, 6)
-  total_return_percent  Decimal                @db.Decimal(10, 4)
-  max_drawdown_percent  Decimal                @db.Decimal(10, 4)
-  win_rate_percent      Decimal                @db.Decimal(10, 4)
-  trade_count           Int
-  signal_count          Int
-  short_window          Int
-  long_window           Int
-  equity_curve          Json?
-  created_at            DateTime               @default(now()) @db.Timestamp(0)
-  backtesttrades        backtesttrades[]
-  stocks                stocks                 @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_BacktestRuns_Stocks1")
-  users                 users                  @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_BacktestRuns_Users1")
+  backtest_run_id      BigInt                 @id @default(autoincrement())
+  user_id              BigInt
+  stock_id             String                 @db.VarChar(20)
+  strategy_type        backtest_strategy_type
+  strategy_name        String                 @db.VarChar(100)
+  start_date           DateTime               @db.Date
+  end_date             DateTime               @db.Date
+  initial_capital      Decimal                @db.Decimal(18, 6)
+  final_value          Decimal                @db.Decimal(18, 6)
+  total_return_percent Decimal                @db.Decimal(10, 4)
+  max_drawdown_percent Decimal                @db.Decimal(10, 4)
+  win_rate_percent     Decimal                @db.Decimal(10, 4)
+  trade_count          Int
+  signal_count         Int
+  short_window         Int
+  long_window          Int
+  equity_curve         Json?
+  created_at           DateTime               @default(now()) @db.Timestamp(0)
+  backtesttrades       backtesttrades[]
+  stocks               stocks                 @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_BacktestRuns_Stocks1")
+  users                users                  @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_BacktestRuns_Users1")
 
   @@index([stock_id], map: "fk_BacktestRuns_Stocks1_idx")
   @@index([user_id, created_at(sort: Desc)], map: "idx_backtestruns_user_created")
