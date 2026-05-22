@@ -14,7 +14,8 @@
 
 ### 股票搜尋與詳細資訊
 
-- 透過頂部搜尋列或儀表板捷徑輸入股票代號，即可查看即時報價、歷史走勢與財務指標。
+- 透過頂部搜尋列或儀表板捷徑輸入股票代號，即可查看最新匯入報價、歷史走勢與財務指標。
+- 歷史走勢支援線圖與 K 線圖，`MAX` 區間會顯示資料庫中可用的完整歷史資料。
   ![alt text](frontend/public/screenshots/Bk8V4pKQge.png)
   ![alt text](frontend/public/screenshots/HJunHTYmxe.png)
 
@@ -39,6 +40,11 @@
 - 支援電子郵件註冊/登入與 Google OAuth，並提供重設密碼等帳戶管理功能。
 - 所有 API 依 Session 控制權限，確保資料安全。
 ![alt text](frontend/public/screenshots/BJB6X6tQxg.png)
+
+### 管理員市場資料維護
+
+- 管理員可在後台查看 `stocks`、`historicalprices`、`financialreports`、`dividends` 與 `stocksplits` 的資料量與最新日期。
+- 後台同步支援 FinLab 優先與免費來源備援，也可選擇上市上櫃或全部可用範圍。
 <!-- > 提示：若需儲存在 Git LFS 或 CDN，可將 Markdown 圖片路徑替換為實際連結，確保 README 顯示正常。 -->
 
 ## 系統架構與技術
@@ -47,7 +53,7 @@
 | ---------- | -------------------------------------------- | ------------------------------------------------------------- |
 | 前端框架   | [Next.js 15 App Router](https://nextjs.org/) | 提供伺服器元件、路由與 SSR/SSG 支援                           |
 | UI / 樣式  | Tailwind CSS、shadcn/ui、Lucide Icons        | 快速建構一致的互動介面                                        |
-| 資料視覺化 | Recharts                                     | 呈現趨勢線圖與迷你圖表                                        |
+| 資料視覺化 | Recharts、lightweight-charts                 | 呈現趨勢線圖、迷你圖表與 K 線圖                               |
 | 驗證       | NextAuth.js（Email + Google OAuth）          | 提供 Session 與 OAuth 流程                                    |
 | 資料庫 ORM | Prisma（MySQL）                              | 操作 `users`、`stocks`、`portfolios`、`transactions` 等資料表 |
 | 密碼處理   | bcryptjs                                     | 帳號密碼雜湊                                                  |
@@ -97,10 +103,12 @@ Stock-Query-Website/
 
    DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DATABASE?connection_limit=5"
    FINLAB_API_TOKEN=你的 FinLab VIP / API Token
+   FINMIND_API_TOKEN=可選，免費來源若需較高額度可設定
    ```
 
    - 若未啟用 Google OAuth，可先留空 `GOOGLE_CLIENT_*`，但登入功能將僅限 Email/密碼。
    - `DATABASE_URL` 請替換為實際 MySQL 連線字串。
+   - `FINLAB_API_TOKEN` 是完整匯入歷史股價與財報的主要資料來源；若缺少 token，管理員同步的 Auto 模式會改用免費來源。
 
 4. **初始化資料庫結構**
 
@@ -110,7 +118,7 @@ Stock-Query-Website/
 
    目前 repo 內的 `prisma/migrations` 與 `prisma/schema.prisma` 並非完全同步；如果你是從零重建資料庫，請優先使用 `prisma db push`，不要直接用舊 migration 做 fresh bootstrap。
 
-5. **用 FinLab 補回核心市場資料**
+5. **匯入市場資料**
 
    ```bash
    npm run db:seed:finlab
@@ -123,9 +131,39 @@ Stock-Query-Website/
    - `financialreports`
    - `dividends`
 
+   預設 `scope` 是 `TSE_OTC`，會匯入上市與上櫃股票。若要包含 ETF 與其他 FinLab 可用標的，請使用：
+
+   ```bash
+   npm run db:seed:finlab -- --scope ALL
+   ```
+
+   若只想補股票主檔與歷史價格，不更新財報與股利，可加上略過參數：
+
+   ```bash
+   npm run db:seed:finlab -- --scope ALL --skip-financials --skip-dividends
+   ```
+
+   專案也提供免費來源備援：
+
+   ```bash
+   npm run db:seed:free
+   ```
+
+   免費來源使用 FinMind 股票主檔、財報與股利資料，並以 TWSE / TPEx 官方最新每日行情補價格；它適合作為備援或快速補最新日資料，不等同於 FinLab 的完整歷史價格匯入。
+
    目前 `stocksplits` 會先保留空表，因為 FinLab 目前主要提供 ETF split 資料，和現有 generic schema 並不完全對應。
 
-6. **啟動開發伺服器**
+6. **後台同步市場資料（選用）**
+
+   登入管理員帳號後可進入「市場資料維護」頁面，由 API 執行同步工作。同步模式支援：
+
+   - `AUTO`：有 `FINLAB_API_TOKEN` 時優先使用 FinLab，失敗或未設定 token 時改用免費來源。
+   - `FINLAB`：強制使用 FinLab。
+   - `FREE`：強制使用 FinMind + TWSE + TPEx 免費來源。
+
+   完整同步可能需要較久時間，部署環境需具備 `DATABASE_URL`、`uv` 與對應資料來源 token。
+
+7. **啟動開發伺服器**
 
    ```bash
    npm run dev
@@ -133,7 +171,7 @@ Stock-Query-Website/
 
    瀏覽器開啟 [http://localhost:3000](http://localhost:3000) 即可開始使用。修改 `app/page.jsx` 或其他檔案會自動觸發 HMR 更新。
 
-7. **建置與部署（選用）**
+8. **建置與部署（選用）**
    ```bash
    npm run build   # 建置生產版
    npm run start   # 啟動生產伺服器（需事先執行 build）
@@ -156,7 +194,9 @@ Stock-Query-Website/
 | `npm run dev`   | 啟動開發伺服器（使用 Next.js Turbopack） |
 | `npm run lint`  | 執行 ESLint，確保程式碼風格一致          |
 | `npm run db:push` | 依 `schema.prisma` 建立或同步資料庫結構 |
-| `npm run db:seed:finlab` | 使用 FinLab 重建核心市場資料 |
+| `npm run db:seed:finlab` | 使用 FinLab 匯入核心市場資料，預設範圍為上市與上櫃 |
+| `npm run db:seed:finlab -- --scope ALL` | 使用 FinLab 匯入全部可用範圍，包含 ETF |
+| `npm run db:seed:free` | 使用 FinMind + TWSE + TPEx 免費來源匯入市場資料 |
 | `npm run build` | 建置生產版本                             |
 | `npm run start` | 以生產模式啟動伺服器                     |
 
@@ -166,6 +206,7 @@ Stock-Query-Website/
 - **API 權限**：所有 `app/api` Route Handler 都會根據 Session 判斷能否查詢或異動資料；未登入請求將回傳 401。
 - **樂觀更新**：例如自選股的加入/移除操作會先更新 UI，再同步後端，並透過 Toast 呈現成功或錯誤訊息。
 - **效能與型別**：Prisma 查詢時限制欄位與筆數（如儀表板僅取前 5 筆摘要），部分 API（如 `app/api/stocks/route.js`）使用原生 SQL 實作全文搜尋與分頁提升效能。
+- **市場資料不是即時串流**：股價、財報與股利資料先由匯入腳本寫入 MySQL，前端查詢時讀取資料庫；若需要盤中即時行情，需另接 WebSocket 或即時 API。
 
 ## 未來可延伸方向
 

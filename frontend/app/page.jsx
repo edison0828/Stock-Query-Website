@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
-import { useRouter, redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Mail, Lock, TrendingUp, Chrome } from "lucide-react";
 
 export default function LoginPage() {
@@ -27,9 +27,11 @@ export default function LoginPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
 
-  if (status === "authenticated") {
-    redirect("/dashboard");
-  }
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/dashboard");
+    }
+  }, [router, status]);
 
   const handleCredentialsLogin = async (e) => {
     e.preventDefault();
@@ -68,7 +70,7 @@ export default function LoginPage() {
     await signIn("google", { callbackUrl: "/dashboard" });
   };
 
-  if (status === "loading" && !session) {
+  if (status === "loading" || status === "authenticated") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         載入中...
