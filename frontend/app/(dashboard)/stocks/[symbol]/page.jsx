@@ -17,7 +17,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // 引入 Tabs
 import {
   Star,
+  AlertTriangle,
   Bell,
+  BarChart3,
   LineChart as BacktestIcon,
   CandlestickChart as CandlestickIcon,
   ShoppingCart,
@@ -41,9 +43,42 @@ import {
 } from "recharts"; // 用於主要圖表
 import { useToast } from "@/hooks/use-toast"; // 引入 useToast
 import { useWatchlist } from "@/contexts/WatchlistContext";
+import { Badge } from "@/components/ui/badge";
 
 // 時間區間按鈕
 const timeRanges = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
+
+function formatMetric(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "N/A";
+  }
+
+  return Number(value).toLocaleString("zh-TW", {
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatLargeMetric(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "N/A";
+  }
+
+  const number = Number(value);
+  if (Math.abs(number) >= 1e9) return `${(number / 1e9).toFixed(1)}B`;
+  if (Math.abs(number) >= 1e6) return `${(number / 1e6).toFixed(1)}M`;
+  if (Math.abs(number) >= 1e3) return `${(number / 1e3).toFixed(1)}K`;
+  return number.toLocaleString("zh-TW");
+}
+
+function qualityBadgeClass(status) {
+  if (status === "ok") {
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  }
+  if (status === "critical") {
+    return "border-red-500/40 bg-red-500/10 text-red-200";
+  }
+  return "border-amber-500/40 bg-amber-500/10 text-amber-100";
+}
 
 // 頁籤內容組件
 const TabContentComponent = ({ title, children, icon: Icon }) => (
@@ -192,6 +227,9 @@ function StockDetailPageContent() {
   }
 
   const currentChartData = stockData.historicalData[selectedTimeRange] || [];
+  const priceQuality = stockData.priceQuality || {};
+  const technicalSummary = stockData.technicalSummary || {};
+  const financialTrend = stockData.financialTrend || [];
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -293,6 +331,64 @@ function StockDetailPageContent() {
           </p>
         </CardContent>
       </Card>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="bg-slate-800 border-slate-700 text-slate-200">
+          <CardContent className="p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-slate-400">價格資料品質</p>
+              <Badge className={qualityBadgeClass(priceQuality.status)}>
+                {priceQuality.status === "ok" ? "OK" : "需檢查"}
+              </Badge>
+            </div>
+            <p className="text-2xl font-semibold text-slate-50">
+              {formatMetric(priceQuality.row_count)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">歷史價格筆數</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-slate-800 border-slate-700 text-slate-200">
+          <CardContent className="p-4">
+            <p className="text-xs font-medium text-slate-400">資料範圍</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">
+              {priceQuality.first_date || "N/A"} -{" "}
+              {priceQuality.latest_date || "N/A"}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              最新基準日 {priceQuality.reference_latest_date || "N/A"}
+            </p>
+          </CardContent>
+        </Card>
+        {[
+          ["MA5", technicalSummary.ma5, "text-amber-300"],
+          ["MA20", technicalSummary.ma20, "text-sky-300"],
+          ["MA60", technicalSummary.ma60, "text-violet-300"],
+        ].map(([label, value, className]) => (
+          <Card
+            key={label}
+            className="bg-slate-800 border-slate-700 text-slate-200"
+          >
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-slate-400">{label}</p>
+              <p className={`mt-2 text-2xl font-semibold ${className}`}>
+                {formatMetric(value)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">最新均線值</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      {priceQuality.issues?.length > 0 && (
+        <Card className="border-amber-500/30 bg-amber-500/10 text-amber-100">
+          <CardContent className="flex gap-3 p-4 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="space-y-1">
+              {priceQuality.issues.map((issue) => (
+                <p key={issue}>{issue}</p>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {/* 歷史價格圖表 */}
       <Card className="bg-slate-800 border-slate-700 text-slate-200">
         <CardHeader>
@@ -390,6 +486,33 @@ function StockDetailPageContent() {
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 6 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="ma5"
+                  name="MA5"
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="ma20"
+                  name="MA20"
+                  stroke="#38bdf8"
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="ma60"
+                  name="MA60"
+                  stroke="#a78bfa"
+                  strokeWidth={1.5}
+                  dot={false}
+                  connectNulls
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -507,6 +630,88 @@ function StockDetailPageContent() {
           className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
         >
           <TabContentComponent title="財務報告摘要" icon={FileText}>
+            {financialTrend.length > 0 && (
+              <div className="mb-6 rounded-md border border-slate-700 bg-slate-900/40 p-4">
+                <div className="mb-4 flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-blue-300" />
+                  <h4 className="text-sm font-semibold text-slate-100">
+                    財報趨勢
+                  </h4>
+                </div>
+                <div className="h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={financialTrend}
+                      margin={{ top: 10, right: 12, left: -18, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                      <XAxis
+                        dataKey="period"
+                        stroke="#94A3B8"
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        yAxisId="amount"
+                        stroke="#94A3B8"
+                        tickFormatter={formatLargeMetric}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis
+                        yAxisId="eps"
+                        orientation="right"
+                        stroke="#f59e0b"
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "rgba(15, 23, 42, 0.94)",
+                          border: "1px solid #475569",
+                          borderRadius: "0.375rem",
+                        }}
+                        labelStyle={{ color: "#CBD5E1", fontWeight: "bold" }}
+                        formatter={(value, name) => [
+                          name === "EPS"
+                            ? formatMetric(value)
+                            : formatLargeMetric(value),
+                          name,
+                        ]}
+                      />
+                      <Legend wrapperStyle={{ color: "#E2E8F0" }} />
+                      <Line
+                        yAxisId="amount"
+                        type="monotone"
+                        dataKey="revenue"
+                        name="營收"
+                        stroke="#38bdf8"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls
+                      />
+                      <Line
+                        yAxisId="amount"
+                        type="monotone"
+                        dataKey="net_income"
+                        name="淨利"
+                        stroke="#22c55e"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls
+                      />
+                      <Line
+                        yAxisId="eps"
+                        type="monotone"
+                        dataKey="eps"
+                        name="EPS"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
             {stockData.financialReports.map((report, index) => (
               <div
                 key={index}

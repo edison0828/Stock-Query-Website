@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { StockAnalysisService } from "@/lib/domain/stocks";
 // 選擇方案 A：直接導入 JSON
 import companyData from "@/data/company.json";
 // 選擇方案 B：使用 CSV 解析器
@@ -43,13 +44,13 @@ export async function GET(request, { params }) {
     // const companyDataMap = getCompanyData();
     // const csvBasicInfo = companyDataMap.get(stockSymbol) || {};
 
-    // 3. 獲取歷史價格數據（不同時間區間）
-    const historicalData = await getHistoricalPriceData(stockSymbol);
+    const analysisService = new StockAnalysisService(prisma);
+    const priceAnalysis = await analysisService.buildPriceAnalysis(stockSymbol);
 
-    // 4. 獲取最新價格和變化
+    // 3. 獲取最新價格和變化
     const latestPrice = await getLatestPriceInfo(stockSymbol);
 
-    // 5. 獲取財務報告
+    // 4. 獲取財務報告
     const financialReports = await prisma.financialreports.findMany({
       where: { stock_id: stockSymbol },
       orderBy: [{ year: "desc" }, { period_type: "desc" }],
@@ -65,7 +66,9 @@ export async function GET(request, { params }) {
       },
     });
 
-    // 6. 獲取股息記錄
+    const financialTrend = analysisService.buildFinancialTrend(financialReports);
+
+    // 5. 獲取股息記錄
     const dividends = await prisma.dividends.findMany({
       where: { stock_id: stockSymbol },
       orderBy: { dividend_date: "desc" },
@@ -76,7 +79,7 @@ export async function GET(request, { params }) {
       },
     });
 
-    // 7. 獲取股票分割記錄
+    // 6. 獲取股票分割記錄
     const splits = await prisma.stocksplits.findMany({
       where: { stock_id: stockSymbol },
       orderBy: { split_date: "desc" },
@@ -106,7 +109,9 @@ export async function GET(request, { params }) {
       marketStatus: getMarketStatus(),
 
       // 歷史數據
-      historicalData,
+      historicalData: priceAnalysis.historicalData,
+      priceQuality: priceAnalysis.priceQuality,
+      technicalSummary: priceAnalysis.technicalSummary,
 
       // 基本資訊（整合 CSV 數據）
       basicInfo: {
@@ -144,6 +149,7 @@ export async function GET(request, { params }) {
         netIncome: formatCurrency(report.net_income),
         eps: report.eps ? `$${Number(report.eps).toFixed(2)}` : "N/A",
       })),
+      financialTrend,
 
       // 股息記錄
       dividends: dividends.map((div) => ({
@@ -173,89 +179,6 @@ export async function GET(request, { params }) {
       { status: 500 }
     );
   }
-}
-
-// 獲取歷史價格數據的輔助函數
-async function getHistoricalPriceData(stockSymbol) {
-  const historicalData = {};
-
-  try {
-    // 獲取最新日期
-    const latestRecord = await prisma.historicalprices.findFirst({
-      where: { stock_id: stockSymbol },
-      orderBy: { date: "desc" },
-      select: { date: true },
-    });
-
-    if (!latestRecord) {
-      const ranges = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
-      ranges.forEach((range) => (historicalData[range] = []));
-      return historicalData;
-    }
-
-    const latestDate = new Date(latestRecord.date);
-
-    // 一次性獲取所有歷史數據，讓 MAX 代表完整可用期間。
-    const allPrices = await prisma.historicalprices.findMany({
-      where: {
-        stock_id: stockSymbol,
-      },
-      orderBy: { date: "asc" },
-      select: {
-        date: true,
-        open_price: true,
-        high_price: true,
-        low_price: true,
-        close_price: true,
-        volume: true,
-      },
-    });
-
-    // 在記憶體中篩選不同時間範圍的數據
-    const timeRanges = {
-      "5D": 5,
-      "1M": 30,
-      "6M": 180,
-      YTD: null,
-      "1Y": 365,
-      "5Y": 1825,
-      MAX: null,
-    };
-
-    for (const [range, days] of Object.entries(timeRanges)) {
-      let filteredPrices = allPrices;
-
-      if (days) {
-        const startDate = new Date(latestDate);
-        startDate.setDate(startDate.getDate() - days);
-        filteredPrices = allPrices.filter(
-          (price) => new Date(price.date) >= startDate
-        );
-      } else if (range === "YTD") {
-        const startOfYear = new Date(latestDate.getFullYear(), 0, 1);
-        filteredPrices = allPrices.filter(
-          (price) => new Date(price.date) >= startOfYear
-        );
-      }
-
-      historicalData[range] = filteredPrices.map((price) => ({
-        date: formatDateForChart(price.date, range),
-        time: formatDateForSeries(price.date),
-        open: toNullableNumber(price.open_price),
-        high: toNullableNumber(price.high_price),
-        low: toNullableNumber(price.low_price),
-        close: toNullableNumber(price.close_price),
-        volume: toNullableNumber(price.volume),
-        price: price.close_price ? Number(price.close_price) : 0,
-      }));
-    }
-  } catch (error) {
-    console.error("獲取歷史數據時發生錯誤:", error);
-    const ranges = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
-    ranges.forEach((range) => (historicalData[range] = []));
-  }
-
-  return historicalData;
 }
 
 // 獲取最新價格資訊的輔助函數
@@ -347,37 +270,4 @@ function formatDate(date) {
 
 function formatDateTime(date) {
   return new Date(date).toLocaleString("zh-TW");
-}
-
-function formatDateForSeries(date) {
-  const d = new Date(date);
-  const month = (d.getMonth() + 1).toString().padStart(2, "0");
-  const day = d.getDate().toString().padStart(2, "0");
-  return `${d.getFullYear()}-${month}-${day}`;
-}
-
-function toNullableNumber(value) {
-  if (value === null || value === undefined) return null;
-  return Number(value);
-}
-
-function formatDateForChart(date, range) {
-  const d = new Date(date);
-
-  switch (range) {
-    case "5D":
-      // 使用 MM/DD 格式，更穩定
-      const month = (d.getMonth() + 1).toString().padStart(2, "0");
-      const day = d.getDate().toString().padStart(2, "0");
-      return `${month}/${day}`;
-    case "1M":
-    case "6M":
-      return d.toLocaleDateString("zh-TW", { month: "short", day: "numeric" });
-    default:
-      return d.toLocaleDateString("zh-TW", {
-        // year: "2-digit",
-        month: "short",
-        day: "numeric",
-      });
-  }
 }

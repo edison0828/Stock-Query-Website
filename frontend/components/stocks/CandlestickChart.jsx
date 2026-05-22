@@ -50,6 +50,15 @@ export default function CandlestickChart({ data = [] }) {
           low: Number(point.low),
           close: Number(point.close),
           volume: Number(point.volume || 0),
+          ma5: point.ma5 === null || point.ma5 === undefined ? null : Number(point.ma5),
+          ma20:
+            point.ma20 === null || point.ma20 === undefined
+              ? null
+              : Number(point.ma20),
+          ma60:
+            point.ma60 === null || point.ma60 === undefined
+              ? null
+              : Number(point.ma60),
         })),
     [data]
   );
@@ -76,6 +85,7 @@ export default function CandlestickChart({ data = [] }) {
         ColorType,
         CrosshairMode,
         HistogramSeries,
+        LineSeries,
         createChart,
       } = await import("lightweight-charts");
 
@@ -122,6 +132,29 @@ export default function CandlestickChart({ data = [] }) {
         wickDownColor: "#ef4444",
       });
       candlestickSeries.setData(candleData);
+
+      [
+        ["ma5", "#f59e0b"],
+        ["ma20", "#38bdf8"],
+        ["ma60", "#a78bfa"],
+      ].forEach(([key, color]) => {
+        const lineData = candleData
+          .filter((point) => point[key] !== null)
+          .map((point) => ({
+            time: point.time,
+            value: point[key],
+          }));
+
+        if (lineData.length > 0) {
+          const lineSeries = chart.addSeries(LineSeries, {
+            color,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          });
+          lineSeries.setData(lineData);
+        }
+      });
 
       const volumeData = candleData
         .filter((point) => point.volume > 0)
