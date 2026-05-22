@@ -163,6 +163,18 @@ def load_company_data() -> Dict[str, dict]:
     return json.loads(COMPANY_JSON_FILE.read_text(encoding="utf-8"))
 
 
+def load_existing_company_names(
+    connection: pymysql.connections.Connection,
+) -> Dict[str, str]:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT stock_id, company_name FROM stocks")
+        return {
+            str(stock_id): str(company_name)
+            for stock_id, company_name in cursor.fetchall()
+            if company_name and str(company_name) != str(stock_id)
+        }
+
+
 def get_universe_ids(market: str) -> List[str]:
     with data.universe(market=market):
         close = data.get("price:收盤價")
@@ -180,6 +192,7 @@ def get_market_id_sets() -> Dict[str, set[str]]:
 def build_stock_rows(
     scope: str,
     company_data: Dict[str, dict],
+    existing_company_names: Dict[str, str],
     market_id_sets: Dict[str, set[str]],
 ) -> List[Tuple[str, str, str, str, str, str]]:
     scope_ids = get_universe_ids(scope)
@@ -192,7 +205,11 @@ def build_stock_rows(
 
     for stock_id in scope_ids:
         profile = company_data.get(stock_id, {})
-        company_name = profile.get("company_name") or stock_id
+        company_name = (
+            profile.get("company_name")
+            or existing_company_names.get(stock_id)
+            or stock_id
+        )
 
         if company_name == stock_id:
             missing_company_names += 1
@@ -437,7 +454,13 @@ def main() -> int:
 
         market_id_sets = get_market_id_sets()
         company_data = load_company_data()
-        stock_rows = build_stock_rows(args.scope, company_data, market_id_sets)
+        existing_company_names = load_existing_company_names(connection)
+        stock_rows = build_stock_rows(
+            args.scope,
+            company_data,
+            existing_company_names,
+            market_id_sets,
+        )
         stock_ids = [row[0] for row in stock_rows]
 
         stock_sql = """
