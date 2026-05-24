@@ -78,7 +78,10 @@ export async function POST(request) {
 
     const statusService = new MarketDataStatusService(prisma);
     const status = await statusService.getCurrentStatus();
-    const recentSyncJobs = await syncHistoryService.listRecent(10);
+    const [recentSyncJobs, assetQuality] = await Promise.all([
+      syncHistoryService.listRecent(10),
+      qualityService.getAssetQualityOverview({ limit: 500 }),
+    ]);
 
     return NextResponse.json({
       message: "市場資料同步完成",
@@ -90,6 +93,7 @@ export async function POST(request) {
         summary: qualityService.summarize(persistedQuality),
         issues: persistedQuality,
       },
+      asset_quality: assetQuality,
     });
   } catch (error) {
     if (!error.status || error.status >= 500) {

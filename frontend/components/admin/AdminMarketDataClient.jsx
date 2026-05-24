@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CalendarClock,
   Database,
+  ExternalLink,
+  Filter,
   FileText,
   History,
   Loader2,
@@ -83,6 +86,29 @@ function severityClass(severity) {
   return "border-blue-500/30 bg-blue-500/10 text-blue-100";
 }
 
+function issueTypeLabel(type) {
+  return (
+    {
+      MISSING_PRICE_DATA: "缺價格",
+      STALE_PRICE_DATE: "日期落後",
+      OLD_SYMBOL_FEW_ROWS: "舊標的少資料",
+      SPARSE_ACTIVE_HISTORY: "長期密度低",
+      MISSING_COMPANY_NAME: "名稱缺漏",
+    }[type] || type
+  );
+}
+
+const qualityFilters = [
+  ["ALL", "全部"],
+  ["STOCK", "股票"],
+  ["ETF", "ETF"],
+  ["MISSING_PRICE_DATA", "缺價格"],
+  ["STALE_PRICE_DATE", "日期落後"],
+  ["OLD_SYMBOL_FEW_ROWS", "舊標的少資料"],
+  ["SPARSE_ACTIVE_HISTORY", "長期密度低"],
+  ["MISSING_COMPANY_NAME", "名稱缺漏"],
+];
+
 export default function AdminMarketDataClient() {
   const { toast } = useToast();
   const [status, setStatus] = useState(null);
@@ -90,6 +116,7 @@ export default function AdminMarketDataClient() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [source, setSource] = useState("AUTO");
   const [scope, setScope] = useState("TSE_OTC");
+  const [qualityFilter, setQualityFilter] = useState("ALL");
   const [skipOptions, setSkipOptions] = useState({
     skip_stocks: false,
     skip_prices: false,
@@ -99,7 +126,24 @@ export default function AdminMarketDataClient() {
   const [lastSyncResult, setLastSyncResult] = useState(null);
   const recentSyncJobs = status?.recent_sync_jobs || [];
   const quality = status?.quality || { summary: {}, issues: [] };
+  const assetQuality = status?.asset_quality || { summary: {}, assets: [] };
+  const assetQualityAssets = assetQuality.assets || [];
   const qualityIssueCount = quality.issues?.length || 0;
+  const filteredAssetQualityAssets = useMemo(() => {
+    if (qualityFilter === "ALL") {
+      return assetQualityAssets;
+    }
+
+    if (qualityFilter === "STOCK" || qualityFilter === "ETF") {
+      return assetQualityAssets.filter(
+        (asset) => asset.asset_type === qualityFilter
+      );
+    }
+
+    return assetQualityAssets.filter((asset) =>
+      asset.issues?.some((issue) => issue.check_type === qualityFilter)
+    );
+  }, [assetQualityAssets, qualityFilter]);
 
   const statusItems = useMemo(
     () => [
@@ -200,6 +244,7 @@ export default function AdminMarketDataClient() {
         ...data.status,
         recent_sync_jobs: data.recent_sync_jobs || [],
         quality: data.quality || { summary: {}, issues: [] },
+        asset_quality: data.asset_quality || { summary: {}, assets: [] },
       });
       setLastSyncResult(data.result);
       toast({
@@ -509,18 +554,19 @@ export default function AdminMarketDataClient() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-slate-50">
               <AlertTriangle className="h-5 w-5 text-amber-300" />
-              資料品質
+              資料品質異常
             </CardTitle>
             <CardDescription className="text-slate-400">
-              檢查缺價格、價格日期落後、長期標的資料過少與名稱缺漏。
+              檢查缺價格、日期落後、長期標的資料過少、密度偏低與名稱缺漏。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-4">
               {[
-                ["缺價格", quality.summary?.MISSING_PRICE_DATA || 0],
-                ["日期落後", quality.summary?.STALE_PRICE_DATE || 0],
-                ["名稱缺漏", quality.summary?.MISSING_COMPANY_NAME || 0],
+                ["異常標的", assetQuality.summary?.total_assets_with_issues || 0],
+                ["Critical", assetQuality.summary?.critical || 0],
+                ["ETF", assetQuality.summary?.ETF || 0],
+                ["股票", assetQuality.summary?.STOCK || 0],
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -534,37 +580,133 @@ export default function AdminMarketDataClient() {
               ))}
             </div>
 
-            {qualityIssueCount > 0 ? (
-              <div className="max-h-[360px] space-y-2 overflow-auto pr-1">
-                {quality.issues.map((issue, index) => (
-                  <div
-                    key={`${issue.check_type}-${issue.stock_id || index}`}
-                    className="rounded-md border border-slate-700 bg-slate-800/60 p-3"
+            <div className="rounded-md border border-slate-700 bg-slate-800/50 p-3">
+              <div className="mb-3 flex items-center gap-2 text-xs font-medium text-slate-400">
+                <Filter className="h-4 w-4" />
+                篩選
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {qualityFilters.map(([value, label]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="sm"
+                    variant={qualityFilter === value ? "default" : "outline"}
+                    onClick={() => setQualityFilter(value)}
+                    className={
+                      qualityFilter === value
+                        ? "h-8 bg-blue-600 text-white hover:bg-blue-500"
+                        : "h-8 border-slate-600 bg-slate-900 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                    }
                   >
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <Badge className={severityClass(issue.severity)}>
-                        {issue.severity}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="border-slate-600 text-slate-300"
-                      >
-                        {issue.check_type}
-                      </Badge>
-                      {issue.stock_id && (
-                        <span className="text-sm font-medium text-slate-100">
-                          {issue.stock_id}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-300">{issue.message}</p>
-                  </div>
+                    {label}
+                  </Button>
                 ))}
+              </div>
+            </div>
+
+            {filteredAssetQualityAssets.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-left text-sm">
+                  <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="py-2 pr-3">標的</th>
+                      <th className="py-2 pr-3">類型</th>
+                      <th className="py-2 pr-3">嚴重度</th>
+                      <th className="py-2 pr-3">價格筆數</th>
+                      <th className="py-2 pr-3">資料範圍</th>
+                      <th className="py-2 pr-3">落後</th>
+                      <th className="py-2 pr-3">原因</th>
+                      <th className="py-2 pr-3">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAssetQualityAssets.slice(0, 80).map((asset) => (
+                      <tr
+                        key={asset.stock_id}
+                        className="border-b border-slate-800 text-slate-300 last:border-0"
+                      >
+                        <td className="py-3 pr-3">
+                          <div className="font-medium text-slate-100">
+                            {asset.stock_id}
+                          </div>
+                          <div className="max-w-[220px] truncate text-xs text-slate-500">
+                            {asset.company_name}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <Badge
+                            variant="outline"
+                            className="border-slate-600 text-slate-300"
+                          >
+                            {asset.asset_type}
+                          </Badge>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <Badge className={severityClass(asset.severity)}>
+                            {asset.severity}
+                          </Badge>
+                        </td>
+                        <td className="py-3 pr-3">
+                          {formatCount(asset.row_count)}
+                        </td>
+                        <td className="py-3 pr-3">
+                          <div>{formatDate(asset.first_date)}</div>
+                          <div className="text-xs text-slate-500">
+                            到 {formatDate(asset.latest_date)}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          {asset.latest_lag_days === null
+                            ? "N/A"
+                            : `${asset.latest_lag_days} 天`}
+                        </td>
+                        <td className="py-3 pr-3">
+                          <div className="flex max-w-[260px] flex-wrap gap-1">
+                            {asset.issues.map((issue) => (
+                              <Badge
+                                key={issue.check_type}
+                                variant="outline"
+                                className="border-slate-600 text-slate-300"
+                              >
+                                {issueTypeLabel(issue.check_type)}
+                              </Badge>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="outline"
+                            className="h-8 border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-700"
+                          >
+                            <Link href={`/stocks/${asset.stock_id}`}>
+                              查看
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Link>
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredAssetQualityAssets.length > 80 && (
+                  <p className="mt-3 text-xs text-slate-500">
+                    目前顯示前 80 筆，請使用篩選器縮小範圍。
+                  </p>
+                )}
               </div>
             ) : (
               <div className="flex min-h-36 items-center justify-center rounded-md border border-dashed border-slate-700 text-sm text-slate-500">
-                目前沒有偵測到資料品質問題
+                目前篩選條件下沒有資料品質問題
               </div>
+            )}
+            {qualityIssueCount > 0 && (
+              <p className="text-xs text-slate-500">
+                最近同步 snapshot 記錄 {formatCount(qualityIssueCount)} 筆問題；
+                上方清單為目前資料庫即時計算結果。
+              </p>
             )}
           </CardContent>
         </Card>

@@ -27,15 +27,17 @@ export async function GET() {
     const syncHistoryService = new MarketDataSyncHistoryService(prisma);
     const qualityService = new MarketDataQualityService(prisma);
     const status = await statusService.getCurrentStatus();
-    const [recentSyncJobs, quality] = await Promise.all([
+    const [recentSyncJobs, quality, assetQuality] = await Promise.all([
       syncHistoryService.listRecent(10),
       qualityService.getLatestSnapshot(200),
+      qualityService.getAssetQualityOverview({ limit: 500 }),
     ]);
 
     return NextResponse.json({
       ...status.toJSON(),
       recent_sync_jobs: recentSyncJobs,
       quality,
+      asset_quality: assetQuality,
     });
   } catch (error) {
     if (!error.status || error.status >= 500) {
