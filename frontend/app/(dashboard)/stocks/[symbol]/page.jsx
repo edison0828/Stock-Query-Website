@@ -82,6 +82,38 @@ function formatPercent(value) {
   })}%`;
 }
 
+function formatSignedPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "N/A";
+  }
+
+  const number = Number(value);
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${number.toLocaleString("zh-TW", {
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
+function percentColorClass(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "text-slate-300";
+  }
+
+  return Number(value) >= 0 ? "text-emerald-300" : "text-red-300";
+}
+
+function signalBadgeClass(value) {
+  if (["偏多", "多頭排列"].includes(value)) {
+    return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  }
+
+  if (["偏空", "空頭排列"].includes(value)) {
+    return "border-red-500/40 bg-red-500/10 text-red-200";
+  }
+
+  return "border-slate-500/40 bg-slate-500/10 text-slate-200";
+}
+
 function qualityBadgeClass(status) {
   if (status === "ok") {
     return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
@@ -242,6 +274,8 @@ function StockDetailPageContent() {
   const currentChartData = stockData.historicalData[selectedTimeRange] || [];
   const priceQuality = stockData.priceQuality || {};
   const technicalSummary = stockData.technicalSummary || {};
+  const performanceSummary = stockData.performanceSummary || {};
+  const returnSummary = performanceSummary.returns || {};
   const financialTrend = stockData.financialTrend || [];
 
   return (
@@ -402,6 +436,152 @@ function StockDetailPageContent() {
           </CardContent>
         </Card>
       )}
+      <Card className="bg-slate-800 border-slate-700 text-slate-200">
+        <CardHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-xl font-semibold text-slate-100">
+                技術與績效指標
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                RSI、MACD、均線狀態、52 週位置與各期間報酬。
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={signalBadgeClass(technicalSummary.ma_trend)}>
+                {technicalSummary.ma_trend || "資料不足"}
+              </Badge>
+              <Badge className={signalBadgeClass(technicalSummary.macd_status)}>
+                MACD {technicalSummary.macd_status || "資料不足"}
+              </Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["RSI 14", formatMetric(technicalSummary.rsi14), "相對強弱"],
+              [
+                "MACD 柱",
+                formatMetric(technicalSummary.macd_histogram),
+                `DIF ${formatMetric(technicalSummary.macd)} / DEA ${formatMetric(
+                  technicalSummary.macd_signal
+                )}`,
+              ],
+              [
+                "量 MA20",
+                formatLargeMetric(technicalSummary.volume_ma20),
+                "20 日成交量均量",
+              ],
+              [
+                "最大回撤",
+                formatSignedPercent(performanceSummary.max_drawdown),
+                "全期間 peak-to-trough",
+              ],
+            ].map(([label, value, detail]) => (
+              <div
+                key={label}
+                className="rounded-md border border-slate-700 bg-slate-900/60 p-4"
+              >
+                <p className="text-xs font-medium text-slate-400">{label}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-50">
+                  {value}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">{detail}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+            <div className="rounded-md border border-slate-700 bg-slate-900/60 p-4">
+              <h4 className="mb-3 text-sm font-semibold text-slate-100">
+                52 週位置
+              </h4>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-slate-500">52 週高點</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-100">
+                    {formatMetric(technicalSummary.week52_high)}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    距高點{" "}
+                    <span
+                      className={percentColorClass(
+                        technicalSummary.distance_to_52w_high
+                      )}
+                    >
+                      {formatSignedPercent(
+                        technicalSummary.distance_to_52w_high
+                      )}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">52 週低點</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-100">
+                    {formatMetric(technicalSummary.week52_low)}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    距低點{" "}
+                    <span
+                      className={percentColorClass(
+                        technicalSummary.distance_to_52w_low
+                      )}
+                    >
+                      {formatSignedPercent(technicalSummary.distance_to_52w_low)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-slate-500">MA20 乖離</p>
+                  <p
+                    className={`mt-1 text-lg font-semibold ${percentColorClass(
+                      technicalSummary.bias_ma20
+                    )}`}
+                  >
+                    {formatSignedPercent(technicalSummary.bias_ma20)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">MA60 乖離</p>
+                  <p
+                    className={`mt-1 text-lg font-semibold ${percentColorClass(
+                      technicalSummary.bias_ma60
+                    )}`}
+                  >
+                    {formatSignedPercent(technicalSummary.bias_ma60)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-700 bg-slate-900/60 p-4">
+              <h4 className="mb-3 text-sm font-semibold text-slate-100">
+                期間報酬
+              </h4>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                {["1M", "3M", "6M", "YTD", "1Y"].map((period) => (
+                  <div
+                    key={period}
+                    className="min-w-0 rounded-md border border-slate-700 bg-slate-800/70 p-3"
+                  >
+                    <p className="text-xs text-slate-500">{period}</p>
+                    <p
+                      className={`mt-1 break-words text-base font-semibold ${percentColorClass(
+                        returnSummary[period]
+                      )}`}
+                    >
+                      {formatSignedPercent(returnSummary[period])}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       {/* 歷史價格圖表 */}
       <Card className="bg-slate-800 border-slate-700 text-slate-200">
         <CardHeader>

@@ -112,6 +112,7 @@ export async function GET(request, { params }) {
       historicalData: priceAnalysis.historicalData,
       priceQuality: priceAnalysis.priceQuality,
       technicalSummary: priceAnalysis.technicalSummary,
+      performanceSummary: priceAnalysis.performanceSummary,
 
       // 基本資訊（整合 CSV 數據）
       basicInfo: {

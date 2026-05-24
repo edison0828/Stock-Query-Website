@@ -41,6 +41,7 @@ export class StockAnalysisService {
       historicalData: analyzer.buildHistoricalData(),
       priceQuality: analyzer.buildQualitySummary(),
       technicalSummary: analyzer.buildTechnicalSummary(),
+      performanceSummary: analyzer.buildPerformanceSummary(),
     };
   }
 

@@ -8,6 +8,19 @@ const RANGE_DAYS = {
 
 const RANGES = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
 const MOVING_AVERAGE_WINDOWS = [5, 20, 60];
+const RSI_PERIOD = 14;
+const MACD_FAST = 12;
+const MACD_SLOW = 26;
+const MACD_SIGNAL = 9;
+const VOLUME_MA_WINDOW = 20;
+const YEAR_TRADING_DAYS = 252;
+const RETURN_PERIODS = {
+  "1M": 30,
+  "3M": 90,
+  "6M": 180,
+  YTD: null,
+  "1Y": 365,
+};
 
 function toNumber(value) {
   if (value === null || value === undefined) {
@@ -62,6 +75,36 @@ function round(value, digits = 2) {
   return Number(Number(value).toFixed(digits));
 }
 
+function percentChange(start, end) {
+  if (
+    start === null ||
+    start === undefined ||
+    end === null ||
+    end === undefined ||
+    Number(start) === 0
+  ) {
+    return null;
+  }
+
+  return round(((Number(end) - Number(start)) / Number(start)) * 100);
+}
+
+function trendDirection(value, positiveLabel = "偏多", negativeLabel = "偏空") {
+  if (value === null || value === undefined) {
+    return "資料不足";
+  }
+
+  if (Number(value) > 0) {
+    return positiveLabel;
+  }
+
+  if (Number(value) < 0) {
+    return negativeLabel;
+  }
+
+  return "中性";
+}
+
 export class PriceSeriesAnalyzer {
   constructor(priceRows, referenceLatestDate = null) {
     this.referenceLatestDate = referenceLatestDate;
@@ -74,6 +117,20 @@ export class PriceSeriesAnalyzer {
   withMovingAverages() {
     const closeWindows = {};
     const sums = {};
+    const volumeWindow = [];
+    let volumeSum = 0;
+    let avgGain = null;
+    let avgLoss = null;
+    let gainSeed = 0;
+    let lossSeed = 0;
+    let previousClose = null;
+    let emaFast = null;
+    let emaSlow = null;
+    let macdSignal = null;
+    let closeCount = 0;
+    const fastMultiplier = 2 / (MACD_FAST + 1);
+    const slowMultiplier = 2 / (MACD_SLOW + 1);
+    const signalMultiplier = 2 / (MACD_SIGNAL + 1);
 
     MOVING_AVERAGE_WINDOWS.forEach((window) => {
       closeWindows[window] = [];
@@ -107,6 +164,87 @@ export class PriceSeriesAnalyzer {
         point[`ma${window}`] =
           queue.length === window ? round(sums[window] / window) : null;
       });
+
+      if (point.volume !== null) {
+        volumeWindow.push(point.volume);
+        volumeSum += point.volume;
+      }
+
+      if (volumeWindow.length > VOLUME_MA_WINDOW) {
+        volumeSum -= volumeWindow.shift();
+      }
+
+      point.volume_ma20 =
+        volumeWindow.length === VOLUME_MA_WINDOW
+          ? round(volumeSum / VOLUME_MA_WINDOW, 0)
+          : null;
+
+      if (close !== null) {
+        closeCount += 1;
+
+        if (previousClose !== null) {
+          const change = close - previousClose;
+          const gain = Math.max(change, 0);
+          const loss = Math.max(-change, 0);
+
+          if (avgGain === null || avgLoss === null) {
+            gainSeed += gain;
+            lossSeed += loss;
+
+            if (closeCount > RSI_PERIOD) {
+              avgGain = gainSeed / RSI_PERIOD;
+              avgLoss = lossSeed / RSI_PERIOD;
+            }
+          } else {
+            avgGain = (avgGain * (RSI_PERIOD - 1) + gain) / RSI_PERIOD;
+            avgLoss = (avgLoss * (RSI_PERIOD - 1) + loss) / RSI_PERIOD;
+          }
+
+          if (avgGain !== null && avgLoss !== null) {
+            if (avgLoss === 0) {
+              point.rsi14 = 100;
+            } else {
+              const rs = avgGain / avgLoss;
+              point.rsi14 = round(100 - 100 / (1 + rs));
+            }
+          } else {
+            point.rsi14 = null;
+          }
+        } else {
+          point.rsi14 = null;
+        }
+
+        emaFast =
+          emaFast === null
+            ? close
+            : close * fastMultiplier + emaFast * (1 - fastMultiplier);
+        emaSlow =
+          emaSlow === null
+            ? close
+            : close * slowMultiplier + emaSlow * (1 - slowMultiplier);
+        point.macd = round(emaFast - emaSlow);
+        macdSignal =
+          macdSignal === null
+            ? point.macd
+            : point.macd * signalMultiplier + macdSignal * (1 - signalMultiplier);
+        point.macd_signal = round(macdSignal);
+        point.macd_histogram = round(point.macd - point.macd_signal);
+        previousClose = close;
+      } else {
+        point.rsi14 = null;
+        point.macd = null;
+        point.macd_signal = null;
+        point.macd_histogram = null;
+      }
+
+      point.bias_ma20 =
+        close !== null && point.ma20
+          ? round(((close - point.ma20) / point.ma20) * 100)
+          : null;
+      point.bias_ma60 =
+        close !== null && point.ma60
+          ? round(((close - point.ma60) / point.ma60) * 100)
+          : null;
 
       return point;
     });
@@ -161,6 +299,13 @@ export class PriceSeriesAnalyzer {
         ma5: point.ma5,
         ma20: point.ma20,
         ma60: point.ma60,
+        rsi14: point.rsi14,
+        macd: point.macd,
+        macd_signal: point.macd_signal,
+        macd_histogram: point.macd_histogram,
+        volume_ma20: point.volume_ma20,
+        bias_ma20: point.bias_ma20,
+        bias_ma60: point.bias_ma60,
       }));
     }
 
@@ -229,13 +374,122 @@ export class PriceSeriesAnalyzer {
         ma5: null,
         ma20: null,
         ma60: null,
+        rsi14: null,
+        macd: null,
+        macd_signal: null,
+        macd_histogram: null,
+        macd_status: "資料不足",
+        ma_trend: "資料不足",
+        volume_ma20: null,
+        bias_ma20: null,
+        bias_ma60: null,
+        week52_high: null,
+        week52_low: null,
+        distance_to_52w_high: null,
+        distance_to_52w_low: null,
       };
     }
+
+    const maTrend =
+      latestPoint.ma5 && latestPoint.ma20 && latestPoint.ma60
+        ? latestPoint.ma5 > latestPoint.ma20 && latestPoint.ma20 > latestPoint.ma60
+          ? "多頭排列"
+          : latestPoint.ma5 < latestPoint.ma20 && latestPoint.ma20 < latestPoint.ma60
+            ? "空頭排列"
+            : "整理"
+        : "資料不足";
+    const recentPoints = this.points.slice(-YEAR_TRADING_DAYS);
+    const recentCloses = recentPoints
+      .map((point) => point.close)
+      .filter((close) => close !== null);
+    const week52High = recentCloses.length ? Math.max(...recentCloses) : null;
+    const week52Low = recentCloses.length ? Math.min(...recentCloses) : null;
 
     return {
       ma5: latestPoint.ma5,
       ma20: latestPoint.ma20,
       ma60: latestPoint.ma60,
+      rsi14: latestPoint.rsi14,
+      macd: latestPoint.macd,
+      macd_signal: latestPoint.macd_signal,
+      macd_histogram: latestPoint.macd_histogram,
+      macd_status: trendDirection(latestPoint.macd_histogram),
+      ma_trend: maTrend,
+      volume_ma20: latestPoint.volume_ma20,
+      bias_ma20: latestPoint.bias_ma20,
+      bias_ma60: latestPoint.bias_ma60,
+      week52_high: round(week52High),
+      week52_low: round(week52Low),
+      distance_to_52w_high:
+        week52High && latestPoint.close
+          ? round(((latestPoint.close - week52High) / week52High) * 100)
+          : null,
+      distance_to_52w_low:
+        week52Low && latestPoint.close
+          ? round(((latestPoint.close - week52Low) / week52Low) * 100)
+          : null,
+    };
+  }
+
+  findPointOnOrAfter(targetDate) {
+    return this.points.find(
+      (point) => point.close !== null && new Date(point.sourceDate) >= targetDate
+    );
+  }
+
+  buildReturnSummary() {
+    const latestPoint = this.latestPoint;
+
+    if (!latestPoint?.close) {
+      return {};
+    }
+
+    const latestDate = new Date(latestPoint.sourceDate);
+    const result = {};
+
+    for (const [label, days] of Object.entries(RETURN_PERIODS)) {
+      let startDate;
+
+      if (label === "YTD") {
+        startDate = new Date(latestDate.getFullYear(), 0, 1);
+      } else {
+        startDate = new Date(latestDate);
+        startDate.setDate(startDate.getDate() - days);
+      }
+
+      const startPoint = this.findPointOnOrAfter(startDate);
+      result[label] = startPoint
+        ? percentChange(startPoint.close, latestPoint.close)
+        : null;
+    }
+
+    return result;
+  }
+
+  buildMaximumDrawdown() {
+    let peak = null;
+    let maxDrawdown = 0;
+
+    for (const point of this.points) {
+      if (point.close === null) {
+        continue;
+      }
+
+      if (peak === null || point.close > peak) {
+        peak = point.close;
+      }
+
+      const drawdown = peak ? ((point.close - peak) / peak) * 100 : 0;
+      maxDrawdown = Math.min(maxDrawdown, drawdown);
+    }
+
+    return round(maxDrawdown);
+  }
+
+  buildPerformanceSummary() {
+    return {
+      returns: this.buildReturnSummary(),
+      max_drawdown: this.buildMaximumDrawdown(),
     };
   }
 }
