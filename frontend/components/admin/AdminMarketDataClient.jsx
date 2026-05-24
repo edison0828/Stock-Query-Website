@@ -10,9 +10,11 @@ import {
   Filter,
   FileText,
   History,
+  Info,
   Loader2,
   Play,
   RefreshCcw,
+  RotateCcw,
   ShieldCheck,
   Split,
   TrendingUp,
@@ -27,6 +29,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -35,6 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 
 function formatCount(value) {
@@ -117,6 +128,9 @@ export default function AdminMarketDataClient() {
   const [source, setSource] = useState("AUTO");
   const [scope, setScope] = useState("TSE_OTC");
   const [qualityFilter, setQualityFilter] = useState("ALL");
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [ignoreReason, setIgnoreReason] = useState("");
+  const [isUpdatingIgnore, setIsUpdatingIgnore] = useState(false);
   const [skipOptions, setSkipOptions] = useState({
     skip_stocks: false,
     skip_prices: false,
@@ -144,6 +158,15 @@ export default function AdminMarketDataClient() {
       asset.issues?.some((issue) => issue.check_type === qualityFilter)
     );
   }, [assetQualityAssets, qualityFilter]);
+  const selectedActiveAsset = selectedAsset
+    ? assetQualityAssets.find((asset) => asset.stock_id === selectedAsset.stock_id)
+    : null;
+  const selectedAssetFromStatus = selectedActiveAsset || selectedAsset;
+  const selectedIgnoredIssues = selectedAssetFromStatus
+    ? (assetQuality.ignored || []).filter(
+        (ignore) => ignore.stock_id === selectedAssetFromStatus.stock_id
+      )
+    : [];
 
   const statusItems = useMemo(
     () => [
@@ -261,6 +284,89 @@ export default function AdminMarketDataClient() {
       });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const updateAssetQuality = (assetQualityResult) => {
+    setStatus((current) => ({
+      ...current,
+      asset_quality: assetQualityResult || { summary: {}, assets: [] },
+    }));
+  };
+
+  const handleIgnoreIssue = async (asset, issue) => {
+    setIsUpdatingIgnore(true);
+
+    try {
+      const response = await fetch("/api/admin/market-data/quality-ignores", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          stock_id: asset.stock_id,
+          check_type: issue.check_type,
+          reason: ignoreReason,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "無法忽略資料品質問題");
+      }
+
+      updateAssetQuality(data.asset_quality);
+      setIgnoreReason("");
+      toast({
+        title: "已標記忽略",
+        description: `${asset.stock_id} ${issueTypeLabel(issue.check_type)}`,
+      });
+    } catch (error) {
+      console.error("Error ignoring market data quality issue:", error);
+      toast({
+        variant: "destructive",
+        title: "操作失敗",
+        description: error.message,
+      });
+    } finally {
+      setIsUpdatingIgnore(false);
+    }
+  };
+
+  const handleUnignoreIssue = async (ignore) => {
+    setIsUpdatingIgnore(true);
+
+    try {
+      const response = await fetch("/api/admin/market-data/quality-ignores", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          stock_id: ignore.stock_id,
+          check_type: ignore.check_type,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || "無法取消忽略資料品質問題");
+      }
+
+      updateAssetQuality(data.asset_quality);
+      toast({
+        title: "已取消忽略",
+        description: `${ignore.stock_id} ${issueTypeLabel(ignore.check_type)}`,
+      });
+    } catch (error) {
+      console.error("Error unignoring market data quality issue:", error);
+      toast({
+        variant: "destructive",
+        title: "操作失敗",
+        description: error.message,
+      });
+    } finally {
+      setIsUpdatingIgnore(false);
     }
   };
 
@@ -675,17 +781,31 @@ export default function AdminMarketDataClient() {
                           </div>
                         </td>
                         <td className="py-3 pr-3">
-                          <Button
-                            asChild
-                            size="sm"
-                            variant="outline"
-                            className="h-8 border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-700"
-                          >
-                            <Link href={`/stocks/${asset.stock_id}`}>
-                              查看
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Link>
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedAsset(asset);
+                                setIgnoreReason("");
+                              }}
+                              className="h-8 border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-700"
+                            >
+                              詳細
+                              <Info className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              asChild
+                              size="sm"
+                              variant="outline"
+                              className="h-8 border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-700"
+                            >
+                              <Link href={`/stocks/${asset.stock_id}`}>
+                                查看
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </Link>
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -711,6 +831,180 @@ export default function AdminMarketDataClient() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={Boolean(selectedAssetFromStatus)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedAsset(null);
+            setIgnoreReason("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl border-slate-700 bg-slate-900 text-slate-100">
+          {selectedAssetFromStatus && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-slate-50">
+                  {selectedAssetFromStatus.stock_id} 資料品質診斷
+                </DialogTitle>
+                <DialogDescription className="text-slate-400">
+                  {selectedAssetFromStatus.company_name}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  ["類型", selectedAssetFromStatus.asset_type],
+                  ["市場", selectedAssetFromStatus.market_type],
+                  ["狀態", selectedAssetFromStatus.security_status],
+                  ["價格筆數", formatCount(selectedAssetFromStatus.row_count)],
+                  ["第一筆", formatDate(selectedAssetFromStatus.first_date)],
+                  ["最新日", formatDate(selectedAssetFromStatus.latest_date)],
+                  [
+                    "基準日",
+                    formatDate(selectedAssetFromStatus.reference_latest_date),
+                  ],
+                  [
+                    "落後天數",
+                    selectedAssetFromStatus.latest_lag_days === null
+                      ? "N/A"
+                      : `${selectedAssetFromStatus.latest_lag_days} 天`,
+                  ],
+                  [
+                    "密度",
+                    selectedAssetFromStatus.density === null
+                      ? "N/A"
+                      : selectedAssetFromStatus.density,
+                  ],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-md border border-slate-700 bg-slate-800/70 p-3"
+                  >
+                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="mt-1 text-sm font-medium text-slate-100">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                <Label className="text-slate-300">忽略原因</Label>
+                <Textarea
+                  value={ignoreReason}
+                  onChange={(event) => setIgnoreReason(event.target.value)}
+                  placeholder="例如：已下市舊標的，保留在主檔但不需追補資料。"
+                  className="border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-slate-100">
+                  目前問題
+                </h4>
+                {selectedActiveAsset?.issues?.length > 0 ? (
+                  selectedActiveAsset.issues.map((issue) => (
+                    <div
+                      key={issue.check_type}
+                      className="flex flex-col gap-3 rounded-md border border-slate-700 bg-slate-800/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <Badge className={severityClass(issue.severity)}>
+                            {issue.severity}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className="border-slate-600 text-slate-300"
+                          >
+                            {issueTypeLabel(issue.check_type)}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-slate-300">
+                          {issue.message}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isUpdatingIgnore}
+                        onClick={() =>
+                          handleIgnoreIssue(selectedAssetFromStatus, issue)
+                        }
+                        className="border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
+                      >
+                        忽略此問題
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-md border border-dashed border-slate-700 p-4 text-sm text-slate-500">
+                    此標的目前沒有未忽略的資料品質問題。
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-slate-100">
+                  已忽略問題
+                </h4>
+                {selectedIgnoredIssues.length > 0 ? (
+                  selectedIgnoredIssues.map((ignore) => (
+                    <div
+                      key={`${ignore.stock_id}-${ignore.check_type}`}
+                      className="flex flex-col gap-3 rounded-md border border-slate-700 bg-slate-800/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <Badge
+                          variant="outline"
+                          className="mb-2 border-slate-600 text-slate-300"
+                        >
+                          {issueTypeLabel(ignore.check_type)}
+                        </Badge>
+                        <p className="text-sm text-slate-300">
+                          {ignore.reason || "未填寫原因"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatDateTime(ignore.created_at)}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isUpdatingIgnore}
+                        onClick={() => handleUnignoreIssue(ignore)}
+                        className="border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-700"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        取消忽略
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-md border border-dashed border-slate-700 p-4 text-sm text-slate-500">
+                    尚未忽略此標的的問題。
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800"
+                >
+                  <Link href={`/stocks/${selectedAssetFromStatus.stock_id}`}>
+                    查看個股頁
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -92,12 +92,12 @@ model portfolios {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model stocks {
-  stock_id         String                    @id @db.VarChar(20)
-  company_name     String                    @db.VarChar(255)
-  market_type      String                    @db.VarChar(255)
-  security_status  String                    @db.VarChar(255)
-  transfer_agent   String                    @db.VarChar(255)
-  currency         String                    @db.VarChar(10)
+  stock_id         String                     @id @db.VarChar(20)
+  company_name     String                     @db.VarChar(255)
+  market_type      String                     @db.VarChar(255)
+  security_status  String                     @db.VarChar(255)
+  transfer_agent   String                     @db.VarChar(255)
+  currency         String                     @db.VarChar(10)
   alertrules       alertrules[]
   backtestruns     backtestruns[]
   dividends        dividends[]
@@ -108,6 +108,7 @@ model stocks {
   transactions     transactions[]
   watchlistitems   watchlistitems[]
   qualitychecks    marketdataqualitychecks[]
+  qualityignores   marketdataqualityignores[]
 
   @@index([company_name], map: "idx_stocks_company_name")
   @@index([market_type], map: "idx_stocks_market_type")
@@ -158,20 +159,21 @@ model transactions {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model users {
-  user_id            BigInt               @id @default(autoincrement())
-  username           String               @unique(map: "username_UNIQUE") @db.VarChar(100)
-  email              String               @unique(map: "email_UNIQUE") @db.VarChar(255)
-  password_hash      String?              @db.VarChar(255)
-  created_at         DateTime             @default(now()) @db.Timestamp(0)
-  last_login         DateTime?            @db.Timestamp(0)
-  google_id          String?              @unique(map: "google_id") @db.VarChar(255)
-  role               String               @default("user") @db.VarChar(255)
-  alertrules         alertrules[]
-  backtestruns       backtestruns[]
-  marketdatasyncjobs marketdatasyncjobs[]
-  notifications      notifications[]
-  portfolios         portfolios[]
-  watchlistitems     watchlistitems[]
+  user_id                  BigInt                     @id @default(autoincrement())
+  username                 String                     @unique(map: "username_UNIQUE") @db.VarChar(100)
+  email                    String                     @unique(map: "email_UNIQUE") @db.VarChar(255)
+  password_hash            String?                    @db.VarChar(255)
+  created_at               DateTime                   @default(now()) @db.Timestamp(0)
+  last_login               DateTime?                  @db.Timestamp(0)
+  google_id                String?                    @unique(map: "google_id") @db.VarChar(255)
+  role                     String                     @default("user") @db.VarChar(255)
+  alertrules               alertrules[]
+  backtestruns             backtestruns[]
+  marketdatasyncjobs       marketdatasyncjobs[]
+  marketdataqualityignores marketdataqualityignores[]
+  notifications            notifications[]
+  portfolios               portfolios[]
+  watchlistitems           watchlistitems[]
 }
 
 model marketdatasyncjobs {
@@ -222,6 +224,21 @@ model marketdataqualitychecks {
   @@index([stock_id], map: "fk_MarketDataQualityChecks_Stocks1_idx")
   @@index([check_type, severity], map: "idx_marketdataqualitychecks_type_severity")
   @@index([created_at(sort: Desc)], map: "idx_marketdataqualitychecks_created")
+}
+
+model marketdataqualityignores {
+  ignore_id          BigInt   @id @default(autoincrement())
+  stock_id           String   @db.VarChar(20)
+  check_type         String   @db.VarChar(80)
+  reason             String?  @db.Text
+  created_at         DateTime @default(now()) @db.Timestamp(0)
+  created_by_user_id BigInt?
+  stocks             stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_MarketDataQualityIgnores_Stocks1")
+  users              users?   @relation(fields: [created_by_user_id], references: [user_id], onDelete: SetNull, map: "fk_MarketDataQualityIgnores_Users1")
+
+  @@unique([stock_id, check_type], map: "uq_marketdataqualityignores_stock_check")
+  @@index([created_by_user_id], map: "fk_MarketDataQualityIgnores_Users1_idx")
+  @@index([check_type], map: "idx_marketdataqualityignores_check_type")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments

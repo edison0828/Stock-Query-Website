@@ -29,6 +29,17 @@ function serializeComputedIssue(issue) {
   };
 }
 
+function serializeIgnore(record) {
+  return {
+    ignore_id: record.ignore_id?.toString() || null,
+    stock_id: record.stock_id,
+    check_type: record.check_type,
+    reason: record.reason || null,
+    created_at: record.created_at?.toISOString() || null,
+    created_by_user_id: record.created_by_user_id?.toString() || null,
+  };
+}
+
 function isLikelyEtf(stockId) {
   return /^00/.test(stockId || "");
 }
@@ -91,6 +102,10 @@ function checkRank(type) {
     SPARSE_ACTIVE_HISTORY: 3,
     MISSING_COMPANY_NAME: 4,
   }[type] ?? 9;
+}
+
+function ignoreKey(stockId, checkType) {
+  return `${stockId}:${checkType}`;
 }
 
 export class MarketDataQualityService {
@@ -234,7 +249,7 @@ export class MarketDataQualityService {
     ];
   }
 
-  buildAssetIssue(row, latestPriceDate) {
+  buildAssetIssue(row, latestPriceDate, ignoreMap = new Map()) {
     const rowCount = Number(row.row_count || 0);
     const firstDate = row.first_date || null;
     const lastDate = row.last_date || null;
@@ -299,11 +314,21 @@ export class MarketDataQualityService {
       });
     }
 
-    if (issues.length === 0) {
+    const activeIssues = issues.filter(
+      (issue) => !ignoreMap.has(ignoreKey(row.stock_id, issue.check_type))
+    );
+    const ignoredIssues = issues
+      .filter((issue) => ignoreMap.has(ignoreKey(row.stock_id, issue.check_type)))
+      .map((issue) => ({
+        ...issue,
+        ignore: ignoreMap.get(ignoreKey(row.stock_id, issue.check_type)),
+      }));
+
+    if (activeIssues.length === 0) {
       return null;
     }
 
-    const severity = issues
+    const severity = activeIssues
       .map((issue) => issue.severity)
       .sort((a, b) => severityRank(a) - severityRank(b))[0];
 
@@ -321,11 +346,12 @@ export class MarketDataQualityService {
       latest_lag_days: latestLagDays,
       span_days: spanDays,
       density: round(density),
-      issues: issues.sort(
+      issues: activeIssues.sort(
         (a, b) =>
           severityRank(a.severity) - severityRank(b.severity) ||
           checkRank(a.check_type) - checkRank(b.check_type)
       ),
+      ignored_issues: ignoredIssues,
     };
   }
 
@@ -354,17 +380,23 @@ export class MarketDataQualityService {
   }
 
   async getAssetQualityOverview({ limit = 500 } = {}) {
-    const rows = await this.prisma.$queryRaw`
-      SELECT s.stock_id, s.company_name, s.market_type, s.security_status,
-             COUNT(h.date) AS row_count,
-             MIN(h.date) AS first_date,
-             MAX(h.date) AS last_date,
-             DATEDIFF(MAX(h.date), MIN(h.date)) AS span_days
-      FROM stocks s
-      LEFT JOIN historicalprices h ON h.stock_id = s.stock_id
-      GROUP BY s.stock_id, s.company_name, s.market_type, s.security_status
-      ORDER BY s.stock_id
-    `;
+    const [rows, ignores] = await Promise.all([
+      this.prisma.$queryRaw`
+        SELECT s.stock_id, s.company_name, s.market_type, s.security_status,
+               COUNT(h.date) AS row_count,
+               MIN(h.date) AS first_date,
+               MAX(h.date) AS last_date,
+               DATEDIFF(MAX(h.date), MIN(h.date)) AS span_days
+        FROM stocks s
+        LEFT JOIN historicalprices h ON h.stock_id = s.stock_id
+        GROUP BY s.stock_id, s.company_name, s.market_type, s.security_status
+        ORDER BY s.stock_id
+      `,
+      this.listIgnores(),
+    ]);
+    const ignoreMap = new Map(
+      ignores.map((ignore) => [ignoreKey(ignore.stock_id, ignore.check_type), ignore])
+    );
 
     const latestPriceDate = rows.reduce((latest, row) => {
       if (!row.last_date) {
@@ -392,7 +424,7 @@ export class MarketDataQualityService {
     }
 
     const assets = rows
-      .map((row) => this.buildAssetIssue(row, latestPriceDate))
+      .map((row) => this.buildAssetIssue(row, latestPriceDate, ignoreMap))
       .filter(Boolean)
       .sort(
         (a, b) =>
@@ -405,8 +437,49 @@ export class MarketDataQualityService {
     return {
       summary: this.summarizeAssetIssues(assets),
       assets: assets.slice(0, limit),
+      ignored: ignores,
       reference_latest_date: formatDate(latestPriceDate),
     };
+  }
+
+  async listIgnores() {
+    const records = await this.prisma.marketdataqualityignores.findMany({
+      orderBy: [{ stock_id: "asc" }, { check_type: "asc" }],
+    });
+
+    return records.map(serializeIgnore);
+  }
+
+  async ignoreIssue({ stockId, checkType, reason, userId }) {
+    const record = await this.prisma.marketdataqualityignores.upsert({
+      where: {
+        stock_id_check_type: {
+          stock_id: stockId,
+          check_type: checkType,
+        },
+      },
+      update: {
+        reason: reason || null,
+        created_by_user_id: userId ? BigInt(userId) : null,
+      },
+      create: {
+        stock_id: stockId,
+        check_type: checkType,
+        reason: reason || null,
+        created_by_user_id: userId ? BigInt(userId) : null,
+      },
+    });
+
+    return serializeIgnore(record);
+  }
+
+  async unignoreIssue({ stockId, checkType }) {
+    await this.prisma.marketdataqualityignores.deleteMany({
+      where: {
+        stock_id: stockId,
+        check_type: checkType,
+      },
+    });
   }
 
   summarize(issues) {
