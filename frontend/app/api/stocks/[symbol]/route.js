@@ -23,6 +23,7 @@ export async function GET(request, { params }) {
         stock_id: true,
         company_name: true,
         market_type: true,
+        asset_type: true,
         security_status: true,
         transfer_agent: true,
         currency: true,
@@ -96,6 +97,8 @@ export async function GET(request, { params }) {
       symbol: stock.stock_id,
       companyName: stock.company_name,
       exchange: stock.market_type,
+      assetType: stock.asset_type,
+      isEtf: stock.asset_type === "ETF",
       currency: stock.currency,
       securityStatus: stock.security_status,
       transferAgent: stock.transfer_agent,
@@ -116,7 +119,10 @@ export async function GET(request, { params }) {
 
       // 基本資訊（整合 CSV 數據）
       basicInfo: {
-        description: `${stock.company_name} 是一家在 ${stock.market_type} 交易的公司。`,
+        description:
+          stock.asset_type === "ETF"
+            ? `${stock.company_name} 是在 ${stock.market_type} 交易的 ETF。`
+            : `${stock.company_name} 是一家在 ${stock.market_type} 交易的公司。`,
         sector: csvBasicInfo.industry || "待補充",
         industry: csvBasicInfo.industry || "待補充",
         marketCap: csvBasicInfo.capital

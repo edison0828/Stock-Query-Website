@@ -277,6 +277,7 @@ function StockDetailPageContent() {
   const performanceSummary = stockData.performanceSummary || {};
   const returnSummary = performanceSummary.returns || {};
   const financialTrend = stockData.financialTrend || [];
+  const isEtf = stockData.isEtf || stockData.assetType === "ETF";
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -290,6 +291,7 @@ function StockDetailPageContent() {
               </h1>
               <p className="text-sm text-slate-400 mt-1">
                 {stockData.exchange}
+                {isEtf ? " / ETF" : ""}
               </p>
             </div>
             <div className="flex items-center gap-2 mt-4 md:mt-0">
@@ -657,7 +659,9 @@ function StockDetailPageContent() {
                 <XAxis dataKey="date" stroke="#94A3B8" tick={{ fontSize: 12 }} />
                 <YAxis
                   stroke="#94A3B8"
-                  tickFormatter={(value) => `$${value.toFixed(0)}`}
+                  tickFormatter={(value) =>
+                    isEtf ? value.toFixed(0) : `$${value.toFixed(0)}`
+                  }
                   tick={{ fontSize: 12 }}
                   domain={["auto", "auto"]}
                 />
@@ -673,66 +677,108 @@ function StockDetailPageContent() {
                 <Legend wrapperStyle={{ color: "#E2E8F0" }} />
                 <Line
                   type="monotone"
-                  dataKey="price"
-                  name="Stock Price"
+                  dataKey={isEtf ? "price_index" : "price"}
+                  name={isEtf ? "淨值化走勢" : "Stock Price"}
                   stroke="#3B82F6"
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 6 }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="ma5"
-                  name="MA5"
-                  stroke="#f59e0b"
-                  strokeWidth={1.5}
-                  dot={false}
-                  connectNulls
-                />
-                <Line
-                  type="monotone"
-                  dataKey="ma20"
-                  name="MA20"
-                  stroke="#38bdf8"
-                  strokeWidth={1.5}
-                  dot={false}
-                  connectNulls
-                />
-                <Line
-                  type="monotone"
-                  dataKey="ma60"
-                  name="MA60"
-                  stroke="#a78bfa"
-                  strokeWidth={1.5}
-                  dot={false}
-                  connectNulls
-                />
+                {!isEtf && (
+                  <>
+                    <Line
+                      type="monotone"
+                      dataKey="ma5"
+                      name="MA5"
+                      stroke="#f59e0b"
+                      strokeWidth={1.5}
+                      dot={false}
+                      connectNulls
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="ma20"
+                      name="MA20"
+                      stroke="#38bdf8"
+                      strokeWidth={1.5}
+                      dot={false}
+                      connectNulls
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="ma60"
+                      name="MA60"
+                      stroke="#a78bfa"
+                      strokeWidth={1.5}
+                      dot={false}
+                      connectNulls
+                    />
+                  </>
+                )}
               </LineChart>
             </ResponsiveContainer>
           )}
         </CardContent>
       </Card>
       {/* 資訊頁籤 */}
-      <Tabs defaultValue="basic-info" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-slate-700/50 p-1 h-auto">
-          <TabsTrigger
-            value="basic-info"
-            className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
-          >
-            基本資料
-          </TabsTrigger>
-          <TabsTrigger
-            value="financials"
-            className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
-          >
-            財務報告
-          </TabsTrigger>
-          <TabsTrigger
-            value="dividends"
-            className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
-          >
-            股息記錄
-          </TabsTrigger>
+      <Tabs
+        defaultValue={isEtf ? "etf-performance" : "basic-info"}
+        className="w-full"
+      >
+        <TabsList
+          className={`grid w-full ${
+            isEtf ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
+          } bg-slate-700/50 p-1 h-auto`}
+        >
+          {isEtf ? (
+            <>
+              <TabsTrigger
+                value="etf-performance"
+                className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
+              >
+                績效
+              </TabsTrigger>
+              <TabsTrigger
+                value="etf-technical"
+                className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
+              >
+                技術指標
+              </TabsTrigger>
+              <TabsTrigger
+                value="dividends"
+                className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
+              >
+                配息紀錄
+              </TabsTrigger>
+              <TabsTrigger
+                value="data-quality"
+                className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
+              >
+                資料品質
+              </TabsTrigger>
+            </>
+          ) : (
+            <>
+              <TabsTrigger
+                value="basic-info"
+                className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
+              >
+                基本資料
+              </TabsTrigger>
+              <TabsTrigger
+                value="financials"
+                className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
+              >
+                財務報告
+              </TabsTrigger>
+              <TabsTrigger
+                value="dividends"
+                className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
+              >
+                股息記錄
+              </TabsTrigger>
+            </>
+          )}
           {/* <TabsTrigger
             value="splits"
             className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
@@ -746,10 +792,11 @@ function StockDetailPageContent() {
             新聞
           </TabsTrigger> */}
         </TabsList>
-        <TabsContent
-          value="basic-info"
-          className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
-        >
+        {!isEtf && (
+          <TabsContent
+            value="basic-info"
+            className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
+          >
           <TabContentComponent title="公司概況" icon={Landmark}>
             <p className="text-sm text-slate-300 leading-relaxed">
               {stockData.basicInfo.description}
@@ -818,10 +865,12 @@ function StockDetailPageContent() {
             </div>
           </TabContentComponent>
         </TabsContent>
-        <TabsContent
-          value="financials"
-          className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
-        >
+        )}
+        {!isEtf && (
+          <TabsContent
+            value="financials"
+            className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
+          >
           <TabContentComponent title="財務報告摘要" icon={FileText}>
             {financialTrend.length > 0 && (
               <div className="mb-6 rounded-md border border-slate-700 bg-slate-900/40 p-4">
@@ -1050,20 +1099,133 @@ function StockDetailPageContent() {
             ))}
           </TabContentComponent>
         </TabsContent>
+        )}
+        {isEtf && (
+          <TabsContent
+            value="etf-performance"
+            className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
+          >
+            <TabContentComponent title="ETF 績效摘要" icon={TrendingUp}>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ["1M", returnSummary["1M"]],
+                  ["3M", returnSummary["3M"]],
+                  ["6M", returnSummary["6M"]],
+                  ["YTD", returnSummary.YTD],
+                  ["1Y", returnSummary["1Y"]],
+                  ["最大回撤", performanceSummary.max_drawdown],
+                  ["距 52 週高點", technicalSummary.distance_to_52w_high],
+                  ["距 52 週低點", technicalSummary.distance_to_52w_low],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-md border border-slate-700 bg-slate-900/60 p-4"
+                  >
+                    <p className="text-xs text-slate-500">{label}</p>
+                    <p
+                      className={`mt-2 text-xl font-semibold ${percentColorClass(
+                        value
+                      )}`}
+                    >
+                      {formatSignedPercent(value)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </TabContentComponent>
+          </TabsContent>
+        )}
+        {isEtf && (
+          <TabsContent
+            value="etf-technical"
+            className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
+          >
+            <TabContentComponent title="ETF 技術指標" icon={BacktestIcon}>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ["RSI 14", formatMetric(technicalSummary.rsi14)],
+                  ["MACD 柱", formatMetric(technicalSummary.macd_histogram)],
+                  ["MA 趨勢", technicalSummary.ma_trend || "資料不足"],
+                  ["成交量 MA20", formatLargeMetric(technicalSummary.volume_ma20)],
+                  ["MA20 乖離", formatSignedPercent(technicalSummary.bias_ma20)],
+                  ["MA60 乖離", formatSignedPercent(technicalSummary.bias_ma60)],
+                  ["52 週高點", formatMetric(technicalSummary.week52_high)],
+                  ["52 週低點", formatMetric(technicalSummary.week52_low)],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-md border border-slate-700 bg-slate-900/60 p-4"
+                  >
+                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="mt-2 text-lg font-semibold text-slate-100">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </TabContentComponent>
+          </TabsContent>
+        )}
         <TabsContent
           value="dividends"
           className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
         >
-          <TabContentComponent title="股息記錄" icon={Landmark}>
+          <TabContentComponent title={isEtf ? "配息紀錄" : "股息記錄"} icon={Landmark}>
             {" "}
             {/* 可以換個更適合股息的圖示 */}
-            {stockData.dividends.map((div, index) => (
-              <p key={index} className="text-sm text-slate-300 mb-1">
-                支付日期: {div.date} - 每股股息: {div.amount}
-              </p>
-            ))}
+            {stockData.dividends.length > 0 ? (
+              stockData.dividends.map((div, index) => (
+                <p key={index} className="text-sm text-slate-300 mb-1">
+                  支付日期: {div.date} - 每股股息: {div.amount}
+                </p>
+              ))
+            ) : (
+              <p className="text-sm text-slate-400">尚無配息資料。</p>
+            )}
           </TabContentComponent>
         </TabsContent>
+        {isEtf && (
+          <TabsContent
+            value="data-quality"
+            className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
+          >
+            <TabContentComponent title="資料品質" icon={AlertTriangle}>
+              <div className="grid gap-3 md:grid-cols-3">
+                {[
+                  ["價格筆數", formatMetric(priceQuality.row_count)],
+                  ["第一筆", priceQuality.first_date || "N/A"],
+                  ["最新日", priceQuality.latest_date || "N/A"],
+                  ["全市場基準日", priceQuality.reference_latest_date || "N/A"],
+                  [
+                    "落後天數",
+                    priceQuality.latest_lag_days === null ||
+                    priceQuality.latest_lag_days === undefined
+                      ? "N/A"
+                      : `${priceQuality.latest_lag_days} 天`,
+                  ],
+                  ["資料密度", formatMetric(priceQuality.density)],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-md border border-slate-700 bg-slate-900/60 p-4"
+                  >
+                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className="mt-2 text-lg font-semibold text-slate-100">
+                      {value}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {priceQuality.issues?.length > 0 && (
+                <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+                  {priceQuality.issues.map((issue) => (
+                    <p key={issue}>{issue}</p>
+                  ))}
+                </div>
+              )}
+            </TabContentComponent>
+          </TabsContent>
+        )}
         {/* 暫時註解掉，尚未實作 */}
         {/*
         <TabsContent

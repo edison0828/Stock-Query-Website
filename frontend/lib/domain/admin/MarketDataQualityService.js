@@ -40,10 +40,6 @@ function serializeIgnore(record) {
   };
 }
 
-function isLikelyEtf(stockId) {
-  return /^00/.test(stockId || "");
-}
-
 function numberOrNull(value) {
   if (value === null || value === undefined) {
     return null;
@@ -123,14 +119,14 @@ export class MarketDataQualityService {
 
   async computeIssues({ limitPerCheck = 50 } = {}) {
     const rows = await this.prisma.$queryRaw`
-      SELECT s.stock_id, s.company_name, s.market_type,
+      SELECT s.stock_id, s.company_name, s.market_type, s.asset_type,
              COUNT(h.date) AS row_count,
              MIN(h.date) AS first_date,
              MAX(h.date) AS last_date,
              DATEDIFF(MAX(h.date), MIN(h.date)) AS span_days
       FROM stocks s
       LEFT JOIN historicalprices h ON h.stock_id = s.stock_id
-      GROUP BY s.stock_id, s.company_name, s.market_type
+      GROUP BY s.stock_id, s.company_name, s.market_type, s.asset_type
       ORDER BY s.stock_id
     `;
 
@@ -203,7 +199,10 @@ export class MarketDataQualityService {
         stockId: row.stock_id,
         severity: "critical",
         message: `${row.stock_id} ${row.company_name} 沒有任何歷史價格資料。`,
-        observedValue: JSON.stringify({ market_type: row.market_type }),
+        observedValue: JSON.stringify({
+          market_type: row.market_type,
+          asset_type: row.asset_type,
+        }),
       })),
       ...stalePriceRows.map((row) => ({
         checkType: "STALE_PRICE_DATE",
@@ -244,7 +243,10 @@ export class MarketDataQualityService {
         stockId: row.stock_id,
         severity: "info",
         message: `${row.stock_id} 的名稱目前仍等於代號，建議補公司或 ETF 名稱。`,
-        observedValue: JSON.stringify({ market_type: row.market_type }),
+        observedValue: JSON.stringify({
+          market_type: row.market_type,
+          asset_type: row.asset_type,
+        }),
       })),
     ];
   }
@@ -335,7 +337,7 @@ export class MarketDataQualityService {
     return {
       stock_id: row.stock_id,
       company_name: row.company_name,
-      asset_type: isLikelyEtf(row.stock_id) ? "ETF" : "STOCK",
+      asset_type: row.asset_type || "STOCK",
       market_type: row.market_type,
       security_status: row.security_status,
       severity,
@@ -382,14 +384,14 @@ export class MarketDataQualityService {
   async getAssetQualityOverview({ limit = 500 } = {}) {
     const [rows, ignores] = await Promise.all([
       this.prisma.$queryRaw`
-        SELECT s.stock_id, s.company_name, s.market_type, s.security_status,
+        SELECT s.stock_id, s.company_name, s.market_type, s.asset_type, s.security_status,
                COUNT(h.date) AS row_count,
                MIN(h.date) AS first_date,
                MAX(h.date) AS last_date,
                DATEDIFF(MAX(h.date), MIN(h.date)) AS span_days
         FROM stocks s
         LEFT JOIN historicalprices h ON h.stock_id = s.stock_id
-        GROUP BY s.stock_id, s.company_name, s.market_type, s.security_status
+        GROUP BY s.stock_id, s.company_name, s.market_type, s.asset_type, s.security_status
         ORDER BY s.stock_id
       `,
       this.listIgnores(),

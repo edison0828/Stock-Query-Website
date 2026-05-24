@@ -95,6 +95,7 @@ model stocks {
   stock_id         String                     @id @db.VarChar(20)
   company_name     String                     @db.VarChar(255)
   market_type      String                     @db.VarChar(255)
+  asset_type       String                     @default("STOCK") @db.VarChar(20)
   security_status  String                     @db.VarChar(255)
   transfer_agent   String                     @db.VarChar(255)
   currency         String                     @db.VarChar(10)
@@ -112,6 +113,7 @@ model stocks {
 
   @@index([company_name], map: "idx_stocks_company_name")
   @@index([market_type], map: "idx_stocks_market_type")
+  @@index([asset_type], map: "idx_stocks_asset_type")
   @@index([stock_id, company_name], map: "idx_stocks_search")
   @@index([security_status], map: "idx_stocks_security_status")
 }

@@ -306,7 +306,17 @@ export class PriceSeriesAnalyzer {
         volume_ma20: point.volume_ma20,
         bias_ma20: point.bias_ma20,
         bias_ma60: point.bias_ma60,
+        price_index: null,
       }));
+
+      const firstClose = filtered.find((point) => point.close !== null)?.close;
+      if (firstClose) {
+        historicalData[range] = historicalData[range].map((point) => ({
+          ...point,
+          price_index:
+            point.close === null ? null : round((point.close / firstClose) * 100),
+        }));
+      }
     }
 
     return historicalData;

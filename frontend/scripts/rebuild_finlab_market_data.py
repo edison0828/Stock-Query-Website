@@ -194,7 +194,7 @@ def build_stock_rows(
     company_data: Dict[str, dict],
     existing_company_names: Dict[str, str],
     market_id_sets: Dict[str, set[str]],
-) -> List[Tuple[str, str, str, str, str, str]]:
+) -> List[Tuple[str, str, str, str, str, str, str]]:
     scope_ids = get_universe_ids(scope)
     tse_ids = market_id_sets["TSE"]
     otc_ids = market_id_sets["OTC"]
@@ -214,6 +214,8 @@ def build_stock_rows(
         if company_name == stock_id:
             missing_company_names += 1
 
+        asset_type = "ETF" if stock_id in etf_ids else "STOCK"
+
         if stock_id in tse_ids or stock_id in etf_ids:
             market_type = "上市"
         elif stock_id in otc_ids:
@@ -226,6 +228,7 @@ def build_stock_rows(
                 stock_id,
                 company_name,
                 market_type,
+                asset_type,
                 "正常",
                 "待補充",
                 "TWD",
@@ -475,13 +478,15 @@ def main() -> int:
                 stock_id,
                 company_name,
                 market_type,
+                asset_type,
                 security_status,
                 transfer_agent,
                 currency
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 company_name = VALUES(company_name),
                 market_type = VALUES(market_type),
+                asset_type = VALUES(asset_type),
                 security_status = VALUES(security_status),
                 transfer_agent = VALUES(transfer_agent),
                 currency = VALUES(currency)
