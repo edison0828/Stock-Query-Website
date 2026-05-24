@@ -35,6 +35,8 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  ComposedChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -68,6 +70,16 @@ function formatLargeMetric(value) {
   if (Math.abs(number) >= 1e6) return `${(number / 1e6).toFixed(1)}M`;
   if (Math.abs(number) >= 1e3) return `${(number / 1e3).toFixed(1)}K`;
   return number.toLocaleString("zh-TW");
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "N/A";
+  }
+
+  return `${Number(value).toLocaleString("zh-TW", {
+    maximumFractionDigits: 2,
+  })}%`;
 }
 
 function qualityBadgeClass(status) {
@@ -107,6 +119,7 @@ function StockDetailPageContent() {
   const [error, setError] = useState(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState("1M"); // 預設時間區間
   const [selectedChartType, setSelectedChartType] = useState("candlestick");
+  const [financialChartMode, setFinancialChartMode] = useState("earnings");
   const [isWatched, setIsWatched] = useState(false); // 模擬關注狀態
   const [isTradeDialogOpen, setIsTradeDialogOpen] = useState(false); // 模擬交易對話框狀態
   const [tradeDialogAction, setTradeDialogAction] = useState("BUY"); // 模擬交易動作
@@ -632,17 +645,51 @@ function StockDetailPageContent() {
           <TabContentComponent title="財務報告摘要" icon={FileText}>
             {financialTrend.length > 0 && (
               <div className="mb-6 rounded-md border border-slate-700 bg-slate-900/40 p-4">
-                <div className="mb-4 flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-blue-300" />
-                  <h4 className="text-sm font-semibold text-slate-100">
-                    財報趨勢
-                  </h4>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-blue-300" />
+                    <h4 className="text-sm font-semibold text-slate-100">
+                      財報趨勢
+                    </h4>
+                  </div>
+                  <div className="flex w-full rounded-md border border-slate-600 bg-slate-900/50 p-1 sm:w-auto">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={
+                        financialChartMode === "earnings" ? "default" : "ghost"
+                      }
+                      onClick={() => setFinancialChartMode("earnings")}
+                      className={
+                        financialChartMode === "earnings"
+                          ? "h-8 flex-1 bg-blue-600 px-3 text-white hover:bg-blue-700 sm:flex-none"
+                          : "h-8 flex-1 px-3 text-slate-300 hover:bg-slate-700 hover:text-slate-100 sm:flex-none"
+                      }
+                    >
+                      損益
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={
+                        financialChartMode === "margins" ? "default" : "ghost"
+                      }
+                      onClick={() => setFinancialChartMode("margins")}
+                      className={
+                        financialChartMode === "margins"
+                          ? "h-8 flex-1 bg-blue-600 px-3 text-white hover:bg-blue-700 sm:flex-none"
+                          : "h-8 flex-1 px-3 text-slate-300 hover:bg-slate-700 hover:text-slate-100 sm:flex-none"
+                      }
+                    >
+                      獲利率
+                    </Button>
+                  </div>
                 </div>
-                <div className="h-[320px]">
+                <div className="h-[340px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
+                    <ComposedChart
                       data={financialTrend}
-                      margin={{ top: 10, right: 12, left: -18, bottom: 0 }}
+                      margin={{ top: 10, right: 12, left: -16, bottom: 0 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                       <XAxis
@@ -657,9 +704,14 @@ function StockDetailPageContent() {
                         tick={{ fontSize: 12 }}
                       />
                       <YAxis
-                        yAxisId="eps"
+                        yAxisId="indicator"
                         orientation="right"
                         stroke="#f59e0b"
+                        tickFormatter={
+                          financialChartMode === "earnings"
+                            ? formatMetric
+                            : formatPercent
+                        }
                         tick={{ fontSize: 12 }}
                       />
                       <Tooltip
@@ -670,44 +722,70 @@ function StockDetailPageContent() {
                         }}
                         labelStyle={{ color: "#CBD5E1", fontWeight: "bold" }}
                         formatter={(value, name) => [
-                          name === "EPS"
+                          ["EPS"].includes(name)
                             ? formatMetric(value)
-                            : formatLargeMetric(value),
+                            : ["營益率", "淨利率"].includes(name)
+                              ? formatPercent(value)
+                              : formatLargeMetric(value),
                           name,
                         ]}
                       />
                       <Legend wrapperStyle={{ color: "#E2E8F0" }} />
-                      <Line
+                      <Bar
                         yAxisId="amount"
-                        type="monotone"
                         dataKey="revenue"
                         name="營收"
-                        stroke="#38bdf8"
-                        strokeWidth={2}
-                        dot={false}
-                        connectNulls
+                        fill="#38bdf8"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={36}
                       />
-                      <Line
-                        yAxisId="amount"
-                        type="monotone"
-                        dataKey="net_income"
-                        name="淨利"
-                        stroke="#22c55e"
-                        strokeWidth={2}
-                        dot={false}
-                        connectNulls
-                      />
-                      <Line
-                        yAxisId="eps"
-                        type="monotone"
-                        dataKey="eps"
-                        name="EPS"
-                        stroke="#f59e0b"
-                        strokeWidth={2}
-                        dot={false}
-                        connectNulls
-                      />
-                    </LineChart>
+                      {financialChartMode === "earnings" && (
+                        <Bar
+                          yAxisId="amount"
+                          dataKey="net_income"
+                          name="淨利"
+                          fill="#22c55e"
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={36}
+                        />
+                      )}
+                      {financialChartMode === "earnings" && (
+                        <Line
+                          yAxisId="indicator"
+                          type="monotone"
+                          dataKey="eps"
+                          name="EPS"
+                          stroke="#f59e0b"
+                          strokeWidth={2}
+                          dot={{ r: 2 }}
+                          connectNulls
+                        />
+                      )}
+                      {financialChartMode === "margins" && (
+                        <Line
+                          yAxisId="indicator"
+                          type="monotone"
+                          dataKey="operating_margin"
+                          name="營益率"
+                          stroke="#a78bfa"
+                          strokeWidth={2}
+                          dot={{ r: 2 }}
+                          connectNulls
+                        />
+                      )}
+                      {financialChartMode === "margins" && (
+                        <Line
+                          yAxisId="indicator"
+                          type="monotone"
+                          dataKey="net_margin"
+                          name="淨利率"
+                          stroke="#f59e0b"
+                          strokeWidth={2}
+                          dot={{ r: 2 }}
+                          connectNulls
+                        />
+                      )}
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </div>
