@@ -293,6 +293,7 @@ function StockDetailPageContent() {
   const isEtf = stockData.isEtf || stockData.assetType === "ETF";
   const etfProfile = stockData.etfProfile;
   const etfNavHistory = stockData.etfNavHistory || [];
+  const etfHoldings = stockData.etfHoldings || { items: [] };
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -1339,22 +1340,112 @@ function StockDetailPageContent() {
                     <h4 className="mb-3 text-sm font-semibold text-slate-100">
                       費用率與成分股
                     </h4>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div>
-                        <p className="text-xs text-slate-500">費用率</p>
-                        <p className="mt-1 text-sm font-medium text-slate-200">
-                          {etfProfile.expenseRatio === null ||
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {[
+                        [
+                          "總費用率",
+                          etfProfile.expenseRatio === null ||
                           etfProfile.expenseRatio === undefined
-                            ? "待接入投信投顧公會費用率來源"
-                            : `${formatMetric(etfProfile.expenseRatio)}%`}
+                            ? "待接入"
+                            : `${formatMetric(etfProfile.expenseRatio)}%`,
+                        ],
+                        [
+                          "管理費",
+                          etfProfile.managementFeeRate === null ||
+                          etfProfile.managementFeeRate === undefined
+                            ? "待接入"
+                            : `${formatMetric(etfProfile.managementFeeRate)}%`,
+                        ],
+                        [
+                          "保管費",
+                          etfProfile.custodianFeeRate === null ||
+                          etfProfile.custodianFeeRate === undefined
+                            ? "待接入"
+                            : `${formatMetric(etfProfile.custodianFeeRate)}%`,
+                        ],
+                      ].map(([label, value]) => (
+                        <div
+                          key={label}
+                          className="rounded-md border border-slate-700 bg-slate-800/70 p-3"
+                        >
+                          <p className="text-xs text-slate-500">{label}</p>
+                          <p className="mt-1 text-base font-semibold text-slate-100">
+                            {value}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      費用資料來源：{formatOptional(etfProfile.feeSource)}
+                    </p>
+
+                    <div className="mt-5">
+                      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <h5 className="text-sm font-semibold text-slate-100">
+                            前大成分股
+                          </h5>
+                          <p className="text-xs text-slate-500">
+                            共 {formatMetric(etfHoldings.totalCount || 0)} 檔
+                            {etfHoldings.snapshotDate
+                              ? `・快照 ${etfHoldings.snapshotDate}`
+                              : ""}
+                          </p>
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          顯示權重排序前 {etfHoldings.items?.length || 0} 檔
                         </p>
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-500">成分股</p>
-                        <p className="mt-1 text-sm font-medium text-slate-200">
-                          第一版先接主檔、追蹤指數、淨值與折溢價；完整成分股會放在下一階段資料來源整合。
+                      {etfHoldings.items?.length > 0 ? (
+                        <div className="overflow-x-auto rounded-md border border-slate-700">
+                          <table className="min-w-full divide-y divide-slate-700 text-sm">
+                            <thead className="bg-slate-800/80 text-xs text-slate-400">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium">
+                                  代號
+                                </th>
+                                <th className="px-3 py-2 text-left font-medium">
+                                  名稱
+                                </th>
+                                <th className="px-3 py-2 text-right font-medium">
+                                  權重
+                                </th>
+                                <th className="px-3 py-2 text-right font-medium">
+                                  股數
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-700 bg-slate-900/40">
+                              {etfHoldings.items.map((holding) => (
+                                <tr key={holding.symbol}>
+                                  <td className="px-3 py-2 font-semibold text-blue-300">
+                                    {holding.symbol}
+                                  </td>
+                                  <td className="px-3 py-2 text-slate-200">
+                                    {holding.name}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-100">
+                                    {holding.weight === null ||
+                                    holding.weight === undefined
+                                      ? "N/A"
+                                      : `${formatMetric(holding.weight)}%`}
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-slate-300">
+                                    {holding.shares === null ||
+                                    holding.shares === undefined
+                                      ? "N/A"
+                                      : formatLargeMetric(holding.shares)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="rounded-md border border-slate-700 bg-slate-800/70 p-3 text-sm text-slate-400">
+                          尚未同步成分股快照。
                         </p>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>

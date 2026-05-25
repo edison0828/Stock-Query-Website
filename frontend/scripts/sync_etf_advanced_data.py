@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Iterable, Iterator, Mapping, Sequence
 from urllib.parse import unquote, urlparse
@@ -21,6 +24,12 @@ from finlab import data
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = ROOT / ".env.local"
 TWSE_ETF_PROFILE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap47_L"
+ETFINFO_BASE_URL = "https://www.etfinfo.tw"
+ETFINFO_SOURCE = "ETFINFO_PUBLIC_PAGE"
+HOLDING_PATTERN = re.compile(
+    r'\{"code":\d+,"name":\d+,"weight":\d+,"shares":\d+,"unit":\d+'
+    r'(?:,"industry":\d+)?\},"([^"]+)","([^"]+)",([0-9.]+),([0-9]+)'
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +53,8 @@ class ETFProfile:
     mops_fund_id: str | None = None
     detail_url: str | None = None
     expense_ratio: float | None = None
+    management_fee_rate: float | None = None
+    custodian_fee_rate: float | None = None
     expense_ratio_period: str | None = None
     fee_source: str | None = None
     data_source: str = "FINLAB_TWSE_OPENAPI"
@@ -57,6 +68,23 @@ class ETFNavSnapshot:
     nav: float | None
     premium_discount: float | None
     data_source: str = "FINLAB"
+
+
+@dataclass(frozen=True)
+class ETFHolding:
+    stock_id: str
+    component_symbol: str
+    component_name: str
+    snapshot_date: date
+    weight: float | None
+    shares: int | None
+    component_close_price: float | None = None
+    component_change_pct: float | None = None
+    contribution_pct: float | None = None
+    component_industry: str | None = None
+    holding_rank: int | None = None
+    data_source: str = ETFINFO_SOURCE
+    source_url: str | None = None
 
 
 class EnvLoader:
@@ -206,6 +234,151 @@ class TwseOpenApiETFDataSource:
         return profiles
 
 
+class ETFInfoHoldingRowParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_row = False
+        self.current_row: list[str] = []
+        self.rows: list[list[str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "tr":
+            return
+        attrs_by_name = dict(attrs)
+        class_name = attrs_by_name.get("class") or ""
+        if "holding-row" in class_name:
+            self.in_row = True
+            self.current_row = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "tr" and self.in_row:
+            self.in_row = False
+            self.rows.append([item for item in self.current_row if item])
+
+    def handle_data(self, data: str) -> None:
+        if not self.in_row:
+            return
+        text = data.strip()
+        if text:
+            self.current_row.append(text)
+
+
+class ETFInfoPublicDataSource:
+    def __init__(self, base_url: str = ETFINFO_BASE_URL) -> None:
+        self.base_url = base_url.rstrip("/")
+
+    def fetch_profile_fees(self, stock_id: str) -> ETFProfile | None:
+        url = f"{self.base_url}/etf/{stock_id}"
+        content = self._fetch_text(url)
+        if not content:
+            return None
+
+        text = html.unescape(re.sub(r"<[^>]+>", " ", content))
+        text = re.sub(r"\s+", " ", text)
+        management_fee = find_percent_after_label(text, "管理費")
+        custodian_fee = find_percent_after_label(text, "保管費")
+
+        if management_fee is None and custodian_fee is None:
+            return None
+
+        return ETFProfile(
+            stock_id=stock_id,
+            management_fee_rate=management_fee,
+            custodian_fee_rate=custodian_fee,
+            fee_source=ETFINFO_SOURCE,
+        )
+
+    def fetch_holdings(self, stock_id: str) -> list[ETFHolding]:
+        url = f"{self.base_url}/etf/{stock_id}/holdings"
+        content = self._fetch_text(url)
+        if not content:
+            return []
+
+        snapshot_date = self._parse_snapshot_date(content)
+        if snapshot_date is None:
+            return []
+
+        holdings = self._parse_serialized_holdings(stock_id, snapshot_date, content, url)
+        if holdings:
+            return holdings
+
+        return self._parse_visible_holdings(stock_id, snapshot_date, content, url)
+
+    def _fetch_text(self, url: str) -> str | None:
+        request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            with urlopen(request, timeout=30) as response:
+                return response.read().decode("utf-8")
+        except Exception as exc:
+            print(f"[etfinfo] fetch failed url={url} error={exc}", flush=True)
+            return None
+
+    def _parse_snapshot_date(self, content: str) -> date | None:
+        match = re.search(r"快照\s*(\d{4}-\d{2}-\d{2})", content)
+        if match:
+            return parse_date(match.group(1))
+        match = re.search(r"持股快照：\s*(\d{4}-\d{2}-\d{2})", content)
+        if match:
+            return parse_date(match.group(1))
+        return None
+
+    def _parse_serialized_holdings(
+        self, stock_id: str, snapshot_date: date, content: str, source_url: str
+    ) -> list[ETFHolding]:
+        rows: list[ETFHolding] = []
+        seen_symbols: set[str] = set()
+
+        for rank, match in enumerate(HOLDING_PATTERN.finditer(content), start=1):
+            component_symbol, component_name, weight, shares = match.groups()
+            component_symbol = html.unescape(component_symbol)
+            component_name = html.unescape(component_name)
+            if component_symbol in seen_symbols:
+                continue
+            seen_symbols.add(component_symbol)
+            rows.append(
+                ETFHolding(
+                    stock_id=stock_id,
+                    component_symbol=component_symbol,
+                    component_name=component_name,
+                    snapshot_date=snapshot_date,
+                    weight=to_float(weight),
+                    shares=to_int(shares),
+                    holding_rank=rank,
+                    source_url=source_url,
+                )
+            )
+
+        return rows
+
+    def _parse_visible_holdings(
+        self, stock_id: str, snapshot_date: date, content: str, source_url: str
+    ) -> list[ETFHolding]:
+        parser = ETFInfoHoldingRowParser()
+        parser.feed(content)
+        rows: list[ETFHolding] = []
+
+        for rank, row in enumerate(parser.rows, start=1):
+            if len(row) < 5:
+                continue
+            rows.append(
+                ETFHolding(
+                    stock_id=stock_id,
+                    component_symbol=row[0],
+                    component_name=row[1],
+                    snapshot_date=snapshot_date,
+                    component_change_pct=parse_percent_text(row[2]),
+                    component_close_price=to_float(row[3]),
+                    weight=parse_percent_text(row[4]),
+                    shares=to_int(row[5]) if len(row) > 5 else None,
+                    contribution_pct=parse_percent_text(row[6]) if len(row) > 6 else None,
+                    holding_rank=rank,
+                    source_url=source_url,
+                )
+            )
+
+        return rows
+
+
 class ETFProfileMerger:
     def merge(
         self,
@@ -265,6 +438,18 @@ class ETFProfileMerger:
             units_outstanding=twse_profile.units_outstanding if twse_profile else None,
             mops_fund_id=twse_profile.mops_fund_id if twse_profile else None,
             detail_url=finlab_profile.detail_url if finlab_profile else None,
+            management_fee_rate=pick(
+                twse_profile.management_fee_rate if twse_profile else None,
+                finlab_profile.management_fee_rate if finlab_profile else None,
+            ),
+            custodian_fee_rate=pick(
+                twse_profile.custodian_fee_rate if twse_profile else None,
+                finlab_profile.custodian_fee_rate if finlab_profile else None,
+            ),
+            fee_source=pick(
+                twse_profile.fee_source if twse_profile else None,
+                finlab_profile.fee_source if finlab_profile else None,
+            ),
             data_source="FINLAB_TWSE_OPENAPI",
             source_as_of_date=twse_profile.source_as_of_date if twse_profile else None,
         )
@@ -280,7 +465,7 @@ class ETFAdvancedDataRepository:
             return {str(row[0]) for row in cursor.fetchall()}
 
     def ensure_required_tables(self) -> None:
-        required = {"stocks", "etfprofiles", "etfnavsnapshots"}
+        required = {"stocks", "etfprofiles", "etfnavsnapshots", "etfholdings"}
         with self.connection.cursor() as cursor:
             cursor.execute("SHOW TABLES")
             existing = {row[0] for row in cursor.fetchall()}
@@ -314,13 +499,15 @@ class ETFAdvancedDataRepository:
                 mops_fund_id,
                 detail_url,
                 expense_ratio,
+                management_fee_rate,
+                custodian_fee_rate,
                 expense_ratio_period,
                 fee_source,
                 data_source,
                 source_as_of_date
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             ON DUPLICATE KEY UPDATE
                 fund_short_name = VALUES(fund_short_name),
@@ -341,12 +528,35 @@ class ETFAdvancedDataRepository:
                 mops_fund_id = VALUES(mops_fund_id),
                 detail_url = VALUES(detail_url),
                 expense_ratio = COALESCE(VALUES(expense_ratio), expense_ratio),
+                management_fee_rate = COALESCE(VALUES(management_fee_rate), management_fee_rate),
+                custodian_fee_rate = COALESCE(VALUES(custodian_fee_rate), custodian_fee_rate),
                 expense_ratio_period = COALESCE(VALUES(expense_ratio_period), expense_ratio_period),
                 fee_source = COALESCE(VALUES(fee_source), fee_source),
                 data_source = VALUES(data_source),
                 source_as_of_date = VALUES(source_as_of_date)
         """
         return self._execute_batches(sql, [profile_to_row(item) for item in profiles], batch_size)
+
+    def update_profile_fees(self, profiles: Sequence[ETFProfile], batch_size: int) -> int:
+        sql = """
+            UPDATE etfprofiles
+            SET management_fee_rate = COALESCE(%s, management_fee_rate),
+                custodian_fee_rate = COALESCE(%s, custodian_fee_rate),
+                fee_source = COALESCE(%s, fee_source)
+            WHERE stock_id = %s
+        """
+        rows = [
+            (
+                profile.management_fee_rate,
+                profile.custodian_fee_rate,
+                profile.fee_source,
+                profile.stock_id,
+            )
+            for profile in profiles
+            if profile.management_fee_rate is not None
+            or profile.custodian_fee_rate is not None
+        ]
+        return self._execute_batches(sql, rows, batch_size)
 
     def upsert_nav_snapshots(
         self, snapshots: Sequence[ETFNavSnapshot], batch_size: int
@@ -368,6 +578,39 @@ class ETFAdvancedDataRepository:
             sql, [nav_snapshot_to_row(item) for item in snapshots], batch_size
         )
 
+    def upsert_holdings(self, holdings: Sequence[ETFHolding], batch_size: int) -> int:
+        sql = """
+            INSERT INTO etfholdings (
+                stock_id,
+                component_symbol,
+                component_name,
+                snapshot_date,
+                weight,
+                shares,
+                component_close_price,
+                component_change_pct,
+                contribution_pct,
+                component_industry,
+                holding_rank,
+                data_source,
+                source_url
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                component_name = VALUES(component_name),
+                weight = VALUES(weight),
+                shares = VALUES(shares),
+                component_close_price = VALUES(component_close_price),
+                component_change_pct = VALUES(component_change_pct),
+                contribution_pct = VALUES(contribution_pct),
+                component_industry = VALUES(component_industry),
+                holding_rank = VALUES(holding_rank),
+                data_source = VALUES(data_source),
+                source_url = VALUES(source_url)
+        """
+        return self._execute_batches(
+            sql, [holding_to_row(item) for item in holdings], batch_size
+        )
+
     def _execute_batches(self, sql: str, rows: Sequence[tuple], batch_size: int) -> int:
         total = 0
         with self.connection.cursor() as cursor:
@@ -383,15 +626,23 @@ class ETFAdvancedDataSyncService:
         self,
         finlab_source: FinLabETFDataSource,
         twse_source: TwseOpenApiETFDataSource,
+        etfinfo_source: ETFInfoPublicDataSource,
         repository: ETFAdvancedDataRepository,
         merger: ETFProfileMerger,
     ) -> None:
         self.finlab_source = finlab_source
         self.twse_source = twse_source
+        self.etfinfo_source = etfinfo_source
         self.repository = repository
         self.merger = merger
 
-    def sync(self, batch_size: int, skip_nav: bool) -> dict[str, int]:
+    def sync(
+        self,
+        batch_size: int,
+        skip_nav: bool,
+        skip_holdings: bool,
+        holdings_limit: int | None,
+    ) -> dict[str, int]:
         self.repository.ensure_required_tables()
         self.finlab_source.login()
 
@@ -410,12 +661,37 @@ class ETFAdvancedDataSyncService:
             nav_snapshots = self.finlab_source.fetch_nav_snapshots(current_etf_ids)
             nav_count = self.repository.upsert_nav_snapshots(nav_snapshots, batch_size)
 
+        fee_profiles: list[ETFProfile] = []
+        holding_rows: list[ETFHolding] = []
+        holdings_ids = sorted(current_etf_ids)
+        if holdings_limit is not None:
+            holdings_ids = holdings_ids[:holdings_limit]
+
+        if not skip_holdings:
+            for index, stock_id in enumerate(holdings_ids, start=1):
+                fee_profile = self.etfinfo_source.fetch_profile_fees(stock_id)
+                if fee_profile:
+                    fee_profiles.append(fee_profile)
+                holdings = self.etfinfo_source.fetch_holdings(stock_id)
+                holding_rows.extend(holdings)
+                if index % 25 == 0:
+                    print(
+                        f"[etfinfo] fetched {index}/{len(holdings_ids)} etfs "
+                        f"holdings={len(holding_rows)} fees={len(fee_profiles)}",
+                        flush=True,
+                    )
+
+        fee_count = self.repository.update_profile_fees(fee_profiles, batch_size)
+        holding_count = self.repository.upsert_holdings(holding_rows, batch_size)
+
         return {
             "current_etfs": len(current_etf_ids),
             "finlab_profiles": len(finlab_profiles),
             "twse_profiles": len(twse_profiles),
             "profiles_upserted": profile_count,
             "nav_snapshots_upserted": nav_count,
+            "fee_profiles_upserted": fee_count,
+            "holdings_upserted": holding_count,
         }
 
 
@@ -426,6 +702,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env-file", default=str(DEFAULT_ENV_FILE))
     parser.add_argument("--batch-size", type=int, default=5000)
     parser.add_argument("--skip-nav", action="store_true")
+    parser.add_argument("--skip-holdings", action="store_true")
+    parser.add_argument(
+        "--holdings-limit",
+        type=int,
+        default=None,
+        help="Limit ETFInfo holding fetches for smoke tests.",
+    )
     return parser.parse_args()
 
 
@@ -517,6 +800,20 @@ def to_float(value: object) -> float | None:
         return None
 
 
+def parse_percent_text(value: object) -> float | None:
+    text = normalize_text(value)
+    if not text:
+        return None
+    return to_float(text.replace("%", "").replace("+", "").replace(",", ""))
+
+
+def find_percent_after_label(text: str, label: str) -> float | None:
+    match = re.search(rf"{re.escape(label)}\s*([0-9.]+)%", text)
+    if not match:
+        return None
+    return to_float(match.group(1))
+
+
 def pick(*values):
     for value in values:
         if value is not None:
@@ -545,6 +842,8 @@ def profile_to_row(profile: ETFProfile) -> tuple:
         profile.mops_fund_id,
         profile.detail_url,
         profile.expense_ratio,
+        profile.management_fee_rate,
+        profile.custodian_fee_rate,
         profile.expense_ratio_period,
         profile.fee_source,
         profile.data_source,
@@ -562,6 +861,24 @@ def nav_snapshot_to_row(snapshot: ETFNavSnapshot) -> tuple:
     )
 
 
+def holding_to_row(holding: ETFHolding) -> tuple:
+    return (
+        holding.stock_id,
+        holding.component_symbol,
+        holding.component_name,
+        holding.snapshot_date,
+        holding.weight,
+        holding.shares,
+        holding.component_close_price,
+        holding.component_change_pct,
+        holding.contribution_pct,
+        holding.component_industry,
+        holding.holding_rank,
+        holding.data_source,
+        holding.source_url,
+    )
+
+
 def batched(rows: Sequence[tuple], batch_size: int) -> Iterator[Sequence[tuple]]:
     for start in range(0, len(rows), batch_size):
         yield rows[start : start + batch_size]
@@ -575,12 +892,18 @@ def main() -> int:
     service = ETFAdvancedDataSyncService(
         finlab_source=FinLabETFDataSource(os.environ.get("FINLAB_API_TOKEN")),
         twse_source=TwseOpenApiETFDataSource(),
+        etfinfo_source=ETFInfoPublicDataSource(),
         repository=ETFAdvancedDataRepository(connection),
         merger=ETFProfileMerger(),
     )
 
     try:
-        summary = service.sync(batch_size=args.batch_size, skip_nav=args.skip_nav)
+        summary = service.sync(
+            batch_size=args.batch_size,
+            skip_nav=args.skip_nav,
+            skip_holdings=args.skip_holdings,
+            holdings_limit=args.holdings_limit,
+        )
         print("[etf-advanced] " + json.dumps(summary, ensure_ascii=False), flush=True)
         return 0
     finally:

@@ -115,6 +115,51 @@ export async function GET(request, { params }) {
           })
         : [];
 
+    const latestHoldingSnapshot =
+      stock.asset_type === "ETF"
+        ? await prisma.etfholdings.findFirst({
+            where: { stock_id: stockSymbol },
+            orderBy: { snapshot_date: "desc" },
+            select: { snapshot_date: true },
+          })
+        : null;
+
+    const etfHoldings =
+      latestHoldingSnapshot !== null
+        ? await prisma.etfholdings.findMany({
+            where: {
+              stock_id: stockSymbol,
+              snapshot_date: latestHoldingSnapshot.snapshot_date,
+            },
+            orderBy: [{ weight: "desc" }, { holding_rank: "asc" }],
+            take: 15,
+            select: {
+              component_symbol: true,
+              component_name: true,
+              snapshot_date: true,
+              weight: true,
+              shares: true,
+              component_close_price: true,
+              component_change_pct: true,
+              contribution_pct: true,
+              component_industry: true,
+              holding_rank: true,
+              data_source: true,
+              source_url: true,
+            },
+          })
+        : [];
+
+    const etfHoldingCount =
+      latestHoldingSnapshot !== null
+        ? await prisma.etfholdings.count({
+            where: {
+              stock_id: stockSymbol,
+              snapshot_date: latestHoldingSnapshot.snapshot_date,
+            },
+          })
+        : 0;
+
     // 8. 組合回應數據，整合 CSV 資訊
     const responseData = {
       symbol: stock.stock_id,
@@ -207,6 +252,11 @@ export async function GET(request, { params }) {
           premiumDiscount: toNumberOrNull(snapshot.premium_discount),
           dataSource: snapshot.data_source,
         })),
+      etfHoldings: formatEtfHoldings(
+        etfHoldings,
+        latestHoldingSnapshot,
+        etfHoldingCount
+      ),
 
       // 新聞
       news: [],
@@ -334,6 +384,8 @@ function formatEtfProfile(profile, navSnapshots) {
     mopsFundId: profile.mops_fund_id,
     detailUrl: profile.detail_url,
     expenseRatio: toNumberOrNull(profile.expense_ratio),
+    managementFeeRate: toNumberOrNull(profile.management_fee_rate),
+    custodianFeeRate: toNumberOrNull(profile.custodian_fee_rate),
     expenseRatioPeriod: profile.expense_ratio_period,
     feeSource: profile.fee_source,
     dataSource: profile.data_source,
@@ -349,6 +401,31 @@ function formatEtfProfile(profile, navSnapshots) {
           dataSource: latestNav.data_source,
         }
       : null,
+  };
+}
+
+function formatEtfHoldings(holdings, latestHoldingSnapshot, holdingCount) {
+  return {
+    snapshotDate: latestHoldingSnapshot
+      ? formatDate(latestHoldingSnapshot.snapshot_date)
+      : null,
+    totalCount: holdingCount,
+    items: holdings.map((holding) => ({
+      symbol: holding.component_symbol,
+      name: holding.component_name,
+      weight: toNumberOrNull(holding.weight),
+      shares:
+        holding.shares === null || holding.shares === undefined
+          ? null
+          : Number(holding.shares),
+      closePrice: toNumberOrNull(holding.component_close_price),
+      changePercent: toNumberOrNull(holding.component_change_pct),
+      contributionPercent: toNumberOrNull(holding.contribution_pct),
+      industry: holding.component_industry,
+      rank: holding.holding_rank,
+      dataSource: holding.data_source,
+      sourceUrl: holding.source_url,
+    })),
   };
 }
 
