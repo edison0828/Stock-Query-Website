@@ -1,3 +1,7 @@
 /ui介面概念圖
 /tmp/
 .vercel
+.DS_Store
+output/.DS_Store
+output/db_backups/
+*.sql.gz
