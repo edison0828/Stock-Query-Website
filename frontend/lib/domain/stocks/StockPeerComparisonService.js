@@ -210,6 +210,7 @@ export class StockPeerComparisonService {
         company_name: true,
         market_type: true,
         asset_type: true,
+        industry_category: true,
         security_status: true,
       },
     });
@@ -218,7 +219,7 @@ export class StockPeerComparisonService {
     return stocks
       .map((stock) => ({
         ...stock,
-        industry: getIndustry(stock.stock_id),
+        industry: stock.industry_category || getIndustry(stock.stock_id),
       }))
       .sort((a, b) => order.get(a.stock_id) - order.get(b.stock_id));
   }
@@ -235,7 +236,11 @@ export class StockPeerComparisonService {
     const anchor = anchorSymbol
       ? await this.prisma.stocks.findUnique({
           where: { stock_id: anchorSymbol },
-          select: { stock_id: true, asset_type: true },
+          select: {
+            stock_id: true,
+            asset_type: true,
+            industry_category: true,
+          },
         })
       : null;
 
@@ -268,10 +273,27 @@ export class StockPeerComparisonService {
       return rows.map((row) => row.stock_id);
     }
 
-    const industry = getIndustry(anchor.stock_id);
+    const industry = anchor.industry_category || getIndustry(anchor.stock_id);
 
     if (!industry) {
       return [anchor.stock_id];
+    }
+
+    if (anchor.industry_category) {
+      const rows = await this.prisma.$queryRaw`
+        SELECT s.stock_id, COUNT(h.date) AS row_count, MAX(h.date) AS latest_date
+        FROM stocks s
+        LEFT JOIN historicalprices h ON h.stock_id = s.stock_id
+        WHERE s.asset_type = 'STOCK'
+          AND s.industry_category = ${anchor.industry_category}
+        GROUP BY s.stock_id
+        ORDER BY CASE WHEN s.stock_id = ${anchor.stock_id} THEN 0 ELSE 1 END ASC,
+                 row_count DESC,
+                 s.stock_id ASC
+        LIMIT ${maxLimit}
+      `;
+
+      return rows.map((row) => row.stock_id);
     }
 
     const sameIndustryIds = Object.entries(getCompanyData())
@@ -308,7 +330,7 @@ export class StockPeerComparisonService {
         .map((profile) => profile.stock_id);
     }
 
-    const anchorIndustry = getIndustry(anchor.stock_id);
+    const anchorIndustry = anchor.industry_category || getIndustry(anchor.stock_id);
 
     return profiles
       .filter(

@@ -189,12 +189,25 @@ def get_market_id_sets() -> Dict[str, set[str]]:
     }
 
 
+def get_finlab_categories() -> Dict[str, str]:
+    categories = data.get("security_categories").reset_index(drop=True)
+    if "stock_id" not in categories.columns or "category" not in categories.columns:
+        return {}
+
+    return {
+        str(row.stock_id).strip(): str(row.category).strip()
+        for row in categories.itertuples(index=False)
+        if getattr(row, "stock_id", None) and getattr(row, "category", None)
+    }
+
+
 def build_stock_rows(
     scope: str,
     company_data: Dict[str, dict],
     existing_company_names: Dict[str, str],
     market_id_sets: Dict[str, set[str]],
-) -> List[Tuple[str, str, str, str, str, str, str]]:
+    finlab_categories: Dict[str, str],
+) -> List[Tuple[str, str, str, str, str | None, str, str, str]]:
     scope_ids = get_universe_ids(scope)
     tse_ids = market_id_sets["TSE"]
     otc_ids = market_id_sets["OTC"]
@@ -229,6 +242,7 @@ def build_stock_rows(
                 company_name,
                 market_type,
                 asset_type,
+                finlab_categories.get(stock_id) or profile.get("industry"),
                 "正常",
                 "待補充",
                 "TWD",
@@ -463,6 +477,7 @@ def main() -> int:
         login_finlab(finlab_api_token)
 
         market_id_sets = get_market_id_sets()
+        finlab_categories = get_finlab_categories()
         company_data = load_company_data()
         existing_company_names = load_existing_company_names(connection)
         stock_rows = build_stock_rows(
@@ -470,6 +485,7 @@ def main() -> int:
             company_data,
             existing_company_names,
             market_id_sets,
+            finlab_categories,
         )
         stock_ids = [row[0] for row in stock_rows]
 
@@ -479,14 +495,16 @@ def main() -> int:
                 company_name,
                 market_type,
                 asset_type,
+                industry_category,
                 security_status,
                 transfer_agent,
                 currency
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 company_name = VALUES(company_name),
                 market_type = VALUES(market_type),
                 asset_type = VALUES(asset_type),
+                industry_category = VALUES(industry_category),
                 security_status = VALUES(security_status),
                 transfer_agent = VALUES(transfer_agent),
                 currency = VALUES(currency)

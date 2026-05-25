@@ -24,6 +24,7 @@ export async function GET(request, { params }) {
         company_name: true,
         market_type: true,
         asset_type: true,
+        industry_category: true,
         security_status: true,
         transfer_agent: true,
         currency: true,
@@ -123,8 +124,8 @@ export async function GET(request, { params }) {
           stock.asset_type === "ETF"
             ? `${stock.company_name} 是在 ${stock.market_type} 交易的 ETF。`
             : `${stock.company_name} 是一家在 ${stock.market_type} 交易的公司。`,
-        sector: csvBasicInfo.industry || "待補充",
-        industry: csvBasicInfo.industry || "待補充",
+        sector: stock.industry_category || csvBasicInfo.industry || "待補充",
+        industry: stock.industry_category || csvBasicInfo.industry || "待補充",
         marketCap: csvBasicInfo.capital
           ? formatCurrency(csvBasicInfo.capital)
           : "待補充",

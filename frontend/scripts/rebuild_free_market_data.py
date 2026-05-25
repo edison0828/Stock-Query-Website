@@ -216,7 +216,7 @@ def normalize_market_scope(records: Sequence[dict], scope: str) -> List[dict]:
 
 def build_stock_rows(
     records: Sequence[dict], company_data: Dict[str, dict]
-) -> List[Tuple[str, str, str, str, str, str, str]]:
+) -> List[Tuple[str, str, str, str, str | None, str, str, str]]:
     rows = []
 
     for record in records:
@@ -239,6 +239,7 @@ def build_stock_rows(
                 str(company_name),
                 market_type,
                 asset_type,
+                industry_category or profile.get("industry"),
                 "正常",
                 "待補充",
                 "TWD",
@@ -527,14 +528,16 @@ def main() -> int:
                 company_name,
                 market_type,
                 asset_type,
+                industry_category,
                 security_status,
                 transfer_agent,
                 currency
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 company_name = VALUES(company_name),
                 market_type = VALUES(market_type),
                 asset_type = VALUES(asset_type),
+                industry_category = VALUES(industry_category),
                 security_status = VALUES(security_status),
                 currency = VALUES(currency)
         """
