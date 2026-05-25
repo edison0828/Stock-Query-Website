@@ -49,8 +49,13 @@ const mockMarketTypes = [
   { id: "ALL", name: "全部市場類型" },
   { id: "上市", name: "上市" },
   { id: "上櫃", name: "上櫃" },
-  { id: "興櫃", name: "興櫃" },
+  { id: "ETF", name: "ETF" },
 ];
+const validMarketTypeIds = new Set(mockMarketTypes.map((item) => item.id));
+
+function normalizeMarketType(value) {
+  return validMarketTypeIds.has(value) ? value : "ALL";
+}
 
 const mockSecurityStatuses = [
   { id: "ALL", name: "全部狀態" },
@@ -69,7 +74,7 @@ export default function StockSearchListPage() {
 
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
   const [selectedMarketType, setSelectedMarketType] = useState(
-    searchParams.get("market_type") || "ALL"
+    normalizeMarketType(searchParams.get("market_type") || "ALL")
   );
   const [selectedSecurityStatus, setSelectedSecurityStatus] = useState(
     searchParams.get("security_status") || "ALL"
@@ -272,7 +277,9 @@ export default function StockSearchListPage() {
   // Effect for initial load from URL or direct navigation
   useEffect(() => {
     const queryFromUrl = searchParams.get("q") || "";
-    const marketTypeFromUrl = searchParams.get("market_type") || "ALL";
+    const marketTypeFromUrl = normalizeMarketType(
+      searchParams.get("market_type") || "ALL"
+    );
     const securityStatusFromUrl = searchParams.get("security_status") || "ALL";
     const pageFromUrl = parseInt(searchParams.get("page") || "1", 10);
 
@@ -334,6 +341,9 @@ export default function StockSearchListPage() {
       isFlat,
     };
   };
+
+  const formatMarketType = (stock) =>
+    stock.asset_type === "ETF" ? "ETF" : stock.market_type;
 
   return (
     <div className="space-y-6">
@@ -494,7 +504,7 @@ export default function StockSearchListPage() {
                             {stock.company_name}
                           </TableCell>
                           <TableCell className="text-slate-300">
-                            {stock.market_type}
+                            {formatMarketType(stock)}
                           </TableCell>
                           <TableCell className="text-slate-300">
                             {stock.security_status}

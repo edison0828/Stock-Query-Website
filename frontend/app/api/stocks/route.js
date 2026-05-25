@@ -28,10 +28,15 @@ export async function GET(request) {
       queryParams.push(searchPattern, searchPattern);
     }
 
-    // 市場類型篩選
+    // 市場類型篩選。ETF 以 asset_type 獨立分組，避免混入上市/上櫃。
     if (marketType && marketType !== "ALL") {
-      whereConditions.push(`s.market_type = ?`);
-      queryParams.push(marketType);
+      if (marketType === "ETF") {
+        whereConditions.push(`s.asset_type = ?`);
+        queryParams.push("ETF");
+      } else {
+        whereConditions.push(`s.market_type = ? AND s.asset_type != ?`);
+        queryParams.push(marketType, "ETF");
+      }
     }
 
     // 證券狀態篩選
@@ -88,6 +93,7 @@ export async function GET(request) {
         s.stock_id,
         s.company_name,
         s.market_type,
+        s.asset_type,
         s.security_status,
         s.currency,
         s.transfer_agent
