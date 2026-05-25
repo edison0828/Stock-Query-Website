@@ -30,6 +30,8 @@ import {
   FileText,
   DivideSquare,
   Landmark,
+  ExternalLink,
+  Layers,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -122,6 +124,17 @@ function qualityBadgeClass(status) {
     return "border-red-500/40 bg-red-500/10 text-red-200";
   }
   return "border-amber-500/40 bg-amber-500/10 text-amber-100";
+}
+
+function formatOptional(value) {
+  if (value === null || value === undefined || value === "") return "待補充";
+  return value;
+}
+
+function formatBooleanLabel(value) {
+  if (value === true) return "是";
+  if (value === false) return "否";
+  return "待補充";
 }
 
 // 頁籤內容組件
@@ -278,6 +291,8 @@ function StockDetailPageContent() {
   const returnSummary = performanceSummary.returns || {};
   const financialTrend = stockData.financialTrend || [];
   const isEtf = stockData.isEtf || stockData.assetType === "ETF";
+  const etfProfile = stockData.etfProfile;
+  const etfNavHistory = stockData.etfNavHistory || [];
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -737,16 +752,22 @@ function StockDetailPageContent() {
       </Card>
       {/* 資訊頁籤 */}
       <Tabs
-        defaultValue={isEtf ? "etf-performance" : "basic-info"}
+        defaultValue={isEtf ? "etf-profile" : "basic-info"}
         className="w-full"
       >
         <TabsList
           className={`grid w-full ${
-            isEtf ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
+            isEtf ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-3"
           } bg-slate-700/50 p-1 h-auto`}
         >
           {isEtf ? (
             <>
+              <TabsTrigger
+                value="etf-profile"
+                className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
+              >
+                ETF資料
+              </TabsTrigger>
               <TabsTrigger
                 value="etf-performance"
                 className="data-[state=active]:bg-slate-600 data-[state=active]:text-slate-50 text-slate-300"
@@ -1114,6 +1135,236 @@ function StockDetailPageContent() {
             ))}
           </TabContentComponent>
         </TabsContent>
+        )}
+        {isEtf && (
+          <TabsContent
+            value="etf-profile"
+            className="bg-slate-800 border border-slate-700 rounded-b-md p-4 md:p-6"
+          >
+            <TabContentComponent title="ETF 進階資料" icon={Layers}>
+              {etfProfile ? (
+                <div className="space-y-5">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      ["ETF分類", formatOptional(etfProfile.etfCategory)],
+                      ["追蹤指數", formatOptional(etfProfile.trackingIndex)],
+                      ["發行投信", formatOptional(etfProfile.issuer)],
+                      [
+                        "最新淨值",
+                        etfProfile.latestNav?.nav
+                          ? `${formatMetric(etfProfile.latestNav.nav)}`
+                          : "待補充",
+                      ],
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        className="rounded-md border border-slate-700 bg-slate-900/60 p-4"
+                      >
+                        <p className="text-xs text-slate-500">{label}</p>
+                        <p className="mt-2 break-words text-lg font-semibold text-slate-100">
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="rounded-md border border-slate-700 bg-slate-900/60 p-4">
+                      <h4 className="mb-3 text-sm font-semibold text-slate-100">
+                        基金資訊
+                      </h4>
+                      <div className="grid gap-3 text-sm sm:grid-cols-2">
+                        {[
+                          ["基金全名", formatOptional(etfProfile.fundName)],
+                          ["英文名稱", formatOptional(etfProfile.fundEnglishName)],
+                          ["成立日", formatOptional(etfProfile.inceptionDate)],
+                          ["上市日", formatOptional(etfProfile.listingDate)],
+                          ["基金經理人", formatOptional(etfProfile.fundManager)],
+                          ["保管機構", formatOptional(etfProfile.custodian)],
+                          [
+                            "含國外成分股",
+                            formatBooleanLabel(etfProfile.hasForeignComponents),
+                          ],
+                          [
+                            "自訂/需揭露指數",
+                            formatOptional(etfProfile.isCustomIndex),
+                          ],
+                          [
+                            "發行單位數",
+                            etfProfile.unitsOutstanding
+                              ? formatLargeMetric(etfProfile.unitsOutstanding)
+                              : "待補充",
+                          ],
+                          ["資料基準日", formatOptional(etfProfile.sourceAsOfDate)],
+                        ].map(([label, value]) => (
+                          <div key={label} className="min-w-0">
+                            <p className="text-xs text-slate-500">{label}</p>
+                            <p className="mt-1 break-words font-medium text-slate-200">
+                              {value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      {etfProfile.detailUrl && (
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className="mt-4 border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700"
+                        >
+                          <a
+                            href={etfProfile.detailUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            ETF官方詳情
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="rounded-md border border-slate-700 bg-slate-900/60 p-4">
+                      <h4 className="mb-3 text-sm font-semibold text-slate-100">
+                        淨值與折溢價
+                      </h4>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {[
+                          [
+                            "日期",
+                            formatOptional(etfProfile.latestNav?.date),
+                          ],
+                          [
+                            "淨值",
+                            etfProfile.latestNav?.nav
+                              ? formatMetric(etfProfile.latestNav.nav)
+                              : "待補充",
+                          ],
+                          [
+                            "折溢價",
+                            etfProfile.latestNav?.premiumDiscount === null ||
+                            etfProfile.latestNav?.premiumDiscount === undefined
+                              ? "待補充"
+                              : formatSignedPercent(
+                                  etfProfile.latestNav.premiumDiscount
+                                ),
+                          ],
+                        ].map(([label, value]) => (
+                          <div
+                            key={label}
+                            className="rounded-md border border-slate-700 bg-slate-800/70 p-3"
+                          >
+                            <p className="text-xs text-slate-500">{label}</p>
+                            <p className="mt-1 break-words text-base font-semibold text-slate-100">
+                              {value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-4 h-[220px]">
+                        {etfNavHistory.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart
+                              data={etfNavHistory}
+                              margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
+                            >
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke="#475569"
+                              />
+                              <XAxis
+                                dataKey="date"
+                                stroke="#94A3B8"
+                                tick={{ fontSize: 11 }}
+                              />
+                              <YAxis
+                                yAxisId="nav"
+                                stroke="#38bdf8"
+                                tick={{ fontSize: 11 }}
+                                domain={["auto", "auto"]}
+                              />
+                              <YAxis
+                                yAxisId="premium"
+                                orientation="right"
+                                stroke="#f59e0b"
+                                tick={{ fontSize: 11 }}
+                                tickFormatter={(value) => `${value}%`}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: "rgba(15, 23, 42, 0.94)",
+                                  border: "1px solid #475569",
+                                  borderRadius: "0.375rem",
+                                }}
+                                formatter={(value, name) => [
+                                  name === "折溢價"
+                                    ? formatSignedPercent(value)
+                                    : formatMetric(value),
+                                  name,
+                                ]}
+                              />
+                              <Legend wrapperStyle={{ color: "#E2E8F0" }} />
+                              <Line
+                                yAxisId="nav"
+                                type="monotone"
+                                dataKey="nav"
+                                name="淨值"
+                                stroke="#38bdf8"
+                                strokeWidth={2}
+                                dot={false}
+                                connectNulls
+                              />
+                              <Line
+                                yAxisId="premium"
+                                type="monotone"
+                                dataKey="premiumDiscount"
+                                name="折溢價"
+                                stroke="#f59e0b"
+                                strokeWidth={2}
+                                dot={false}
+                                connectNulls
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                            尚無淨值歷史資料。
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border border-slate-700 bg-slate-900/60 p-4">
+                    <h4 className="mb-3 text-sm font-semibold text-slate-100">
+                      費用率與成分股
+                    </h4>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <p className="text-xs text-slate-500">費用率</p>
+                        <p className="mt-1 text-sm font-medium text-slate-200">
+                          {etfProfile.expenseRatio === null ||
+                          etfProfile.expenseRatio === undefined
+                            ? "待接入投信投顧公會費用率來源"
+                            : `${formatMetric(etfProfile.expenseRatio)}%`}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">成分股</p>
+                        <p className="mt-1 text-sm font-medium text-slate-200">
+                          第一版先接主檔、追蹤指數、淨值與折溢價；完整成分股會放在下一階段資料來源整合。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">
+                  尚未同步 ETF 進階資料，請先執行 ETF 資料同步。
+                </p>
+              )}
+            </TabContentComponent>
+          </TabsContent>
         )}
         {isEtf && (
           <TabsContent

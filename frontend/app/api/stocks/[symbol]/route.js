@@ -93,6 +93,28 @@ export async function GET(request, { params }) {
       },
     });
 
+    const etfProfile =
+      stock.asset_type === "ETF"
+        ? await prisma.etfprofiles.findUnique({
+            where: { stock_id: stockSymbol },
+          })
+        : null;
+
+    const etfNavSnapshots =
+      stock.asset_type === "ETF"
+        ? await prisma.etfnavsnapshots.findMany({
+            where: { stock_id: stockSymbol },
+            orderBy: { date: "desc" },
+            take: 30,
+            select: {
+              date: true,
+              nav: true,
+              premium_discount: true,
+              data_source: true,
+            },
+          })
+        : [];
+
     // 8. 組合回應數據，整合 CSV 資訊
     const responseData = {
       symbol: stock.stock_id,
@@ -174,6 +196,17 @@ export async function GET(request, { params }) {
           split.split_ratio_after
         )}`,
       })),
+
+      etfProfile: formatEtfProfile(etfProfile, etfNavSnapshots),
+      etfNavHistory: etfNavSnapshots
+        .slice()
+        .reverse()
+        .map((snapshot) => ({
+          date: formatDate(snapshot.date),
+          nav: toNumberOrNull(snapshot.nav),
+          premiumDiscount: toNumberOrNull(snapshot.premium_discount),
+          dataSource: snapshot.data_source,
+        })),
 
       // 新聞
       news: [],
@@ -270,6 +303,59 @@ function formatCurrency(amount) {
   if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
   if (num >= 1e3) return `$${(num / 1e3).toFixed(1)}K`;
   return `$${num.toFixed(0)}`;
+}
+
+function formatEtfProfile(profile, navSnapshots) {
+  if (!profile) return null;
+
+  const latestNav = navSnapshots[0] || null;
+
+  return {
+    fundShortName: profile.fund_short_name,
+    fundName: profile.fund_name,
+    fundEnglishName: profile.fund_english_name,
+    issuer: profile.issuer,
+    etfCategory: profile.etf_category,
+    trackingIndex: profile.tracking_index,
+    isCustomIndex: profile.is_custom_index,
+    hasForeignComponents: profile.has_foreign_components,
+    benchmarkName: profile.benchmark_name,
+    benchmarkEnglishName: profile.benchmark_english_name,
+    inceptionDate: profile.inception_date
+      ? formatDate(profile.inception_date)
+      : null,
+    listingDate: profile.listing_date ? formatDate(profile.listing_date) : null,
+    fundManager: profile.fund_manager,
+    custodian: profile.custodian,
+    unitsOutstanding:
+      profile.units_outstanding === null || profile.units_outstanding === undefined
+        ? null
+        : Number(profile.units_outstanding),
+    mopsFundId: profile.mops_fund_id,
+    detailUrl: profile.detail_url,
+    expenseRatio: toNumberOrNull(profile.expense_ratio),
+    expenseRatioPeriod: profile.expense_ratio_period,
+    feeSource: profile.fee_source,
+    dataSource: profile.data_source,
+    sourceAsOfDate: profile.source_as_of_date
+      ? formatDate(profile.source_as_of_date)
+      : null,
+    updatedAt: profile.updated_at ? formatDateTime(profile.updated_at) : null,
+    latestNav: latestNav
+      ? {
+          date: formatDate(latestNav.date),
+          nav: toNumberOrNull(latestNav.nav),
+          premiumDiscount: toNumberOrNull(latestNav.premium_discount),
+          dataSource: latestNav.data_source,
+        }
+      : null,
+  };
+}
+
+function toNumberOrNull(value) {
+  if (value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isNaN(number) ? null : number;
 }
 
 function formatDate(date) {

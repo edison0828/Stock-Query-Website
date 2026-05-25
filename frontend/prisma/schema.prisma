@@ -111,6 +111,8 @@ model stocks {
   watchlistitems    watchlistitems[]
   qualitychecks     marketdataqualitychecks[]
   qualityignores    marketdataqualityignores[]
+  etfprofile        etfprofiles?
+  etfnavsnapshots   etfnavsnapshots[]
 
   @@index([company_name], map: "idx_stocks_company_name")
   @@index([market_type], map: "idx_stocks_market_type")
@@ -118,6 +120,52 @@ model stocks {
   @@index([industry_category], map: "idx_stocks_industry_category")
   @@index([stock_id, company_name], map: "idx_stocks_search")
   @@index([security_status], map: "idx_stocks_security_status")
+}
+
+model etfprofiles {
+  stock_id               String    @id @db.VarChar(20)
+  fund_short_name        String?   @db.VarChar(255)
+  fund_name              String?   @db.VarChar(255)
+  fund_english_name      String?   @db.VarChar(255)
+  issuer                 String?   @db.VarChar(255)
+  etf_category           String?   @db.VarChar(255)
+  tracking_index         String?   @db.VarChar(500)
+  is_custom_index        String?   @db.VarChar(100)
+  has_foreign_components Boolean?
+  benchmark_name         String?   @db.VarChar(255)
+  benchmark_english_name String?   @db.VarChar(255)
+  inception_date         DateTime? @db.Date
+  listing_date           DateTime? @db.Date
+  fund_manager           String?   @db.VarChar(100)
+  custodian              String?   @db.VarChar(255)
+  units_outstanding      BigInt?
+  mops_fund_id           String?   @db.VarChar(50)
+  detail_url             String?   @db.VarChar(500)
+  expense_ratio          Decimal?  @db.Decimal(10, 4)
+  expense_ratio_period   String?   @db.VarChar(50)
+  fee_source             String?   @db.VarChar(100)
+  data_source            String    @default("FINLAB_TWSE_OPENAPI") @db.VarChar(100)
+  source_as_of_date      DateTime? @db.Date
+  updated_at             DateTime  @default(now()) @updatedAt @db.Timestamp(0)
+  stocks                 stocks    @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_EtfProfiles_Stocks1")
+
+  @@index([etf_category], map: "idx_etfprofiles_category")
+  @@index([tracking_index], map: "idx_etfprofiles_tracking_index")
+  @@index([issuer], map: "idx_etfprofiles_issuer")
+}
+
+model etfnavsnapshots {
+  nav_id           BigInt   @id @default(autoincrement())
+  stock_id         String   @db.VarChar(20)
+  date             DateTime @db.Date
+  nav              Decimal? @db.Decimal(18, 6)
+  premium_discount Decimal? @db.Decimal(10, 4)
+  data_source      String   @default("FINLAB") @db.VarChar(100)
+  created_at       DateTime @default(now()) @db.Timestamp(0)
+  stocks           stocks   @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_EtfNavSnapshots_Stocks1")
+
+  @@unique([stock_id, date], map: "uq_etfnavsnapshots_stock_date")
+  @@index([stock_id, date(sort: Desc)], map: "idx_etfnavsnapshots_stock_date")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
