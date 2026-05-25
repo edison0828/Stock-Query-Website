@@ -335,6 +335,21 @@ function StockDetailPageContent() {
                 </Link>
               </Button>
               <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="border-cyan-500/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20 hover:text-cyan-50"
+              >
+                <Link
+                  href={`/compare?mode=${isEtf ? "etf" : "peers"}&symbol=${encodeURIComponent(
+                    stockSymbol
+                  )}`}
+                >
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  同類比較
+                </Link>
+              </Button>
+              <Button
                 size="sm"
                 onClick={() => handleOpenTradeDialog("BUY")}
                 className="bg-blue-600 hover:bg-blue-700"
