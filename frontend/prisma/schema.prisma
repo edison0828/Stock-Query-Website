@@ -422,6 +422,9 @@ enum backtest_strategy_type {
   MOVING_AVERAGE_CROSS
   RSI_REVERSION
   BREAKOUT
+  BUY_AND_HOLD
+  MA_CROSS_WITH_STOP_LOSS
+  BOLLINGER_REVERSION
 }
 
 enum backtest_trade_type {

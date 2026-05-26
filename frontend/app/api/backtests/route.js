@@ -97,6 +97,14 @@ function normalizeStrategyParameters(strategyType, body) {
     };
   }
 
+  if (strategyType === "MA_CROSS_WITH_STOP_LOSS") {
+    return {
+      shortWindow: Number(parameters.shortWindow),
+      longWindow: Number(parameters.longWindow),
+      stopLossPercent: Number(parameters.stopLossPercent),
+    };
+  }
+
   if (strategyType === "RSI_REVERSION") {
     return {
       rsiWindow: Number(parameters.rsiWindow),
@@ -109,6 +117,17 @@ function normalizeStrategyParameters(strategyType, body) {
     return {
       lookbackWindow: Number(parameters.lookbackWindow),
     };
+  }
+
+  if (strategyType === "BOLLINGER_REVERSION") {
+    return {
+      window: Number(parameters.window),
+      standardDeviationMultiplier: Number(parameters.standardDeviationMultiplier),
+    };
+  }
+
+  if (strategyType === "BUY_AND_HOLD") {
+    return {};
   }
 
   return parameters;

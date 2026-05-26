@@ -95,6 +95,29 @@ function getDefaultEndDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function getStrategyParameterLabel(run) {
+  const parameters = run?.parameters || {};
+
+  switch (run?.strategy_type) {
+    case "MOVING_AVERAGE_CROSS":
+      return `${parameters.shortWindow ?? run.short_window}/${
+        parameters.longWindow ?? run.long_window
+      } MA`;
+    case "RSI_REVERSION":
+      return `RSI ${parameters.rsiWindow}`;
+    case "BREAKOUT":
+      return `突破 ${parameters.lookbackWindow} 日`;
+    case "BUY_AND_HOLD":
+      return "Buy & Hold";
+    case "MA_CROSS_WITH_STOP_LOSS":
+      return `${parameters.shortWindow}/${parameters.longWindow} MA · 停損 ${parameters.stopLossPercent}%`;
+    case "BOLLINGER_REVERSION":
+      return `布林 ${parameters.window} · ${parameters.standardDeviationMultiplier}σ`;
+    default:
+      return run?.strategy_name || "策略";
+  }
+}
+
 export default function BacktestsPage() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
@@ -110,10 +133,13 @@ export default function BacktestsPage() {
     end_date: getDefaultEndDate(),
     short_window: "5",
     long_window: "20",
+    stop_loss_percent: "8",
     rsi_window: "14",
     oversold_threshold: "30",
     overbought_threshold: "70",
     lookback_window: "20",
+    bollinger_window: "20",
+    bollinger_std: "2",
     initial_capital: "100000",
     sizing_mode: "FULL_CAPITAL",
     position_size_percent: "100",
@@ -228,6 +254,16 @@ export default function BacktestsPage() {
         BREAKOUT: {
           lookbackWindow: Number(form.lookback_window),
         },
+        BUY_AND_HOLD: {},
+        MA_CROSS_WITH_STOP_LOSS: {
+          shortWindow: Number(form.short_window),
+          longWindow: Number(form.long_window),
+          stopLossPercent: Number(form.stop_loss_percent),
+        },
+        BOLLINGER_REVERSION: {
+          window: Number(form.bollinger_window),
+          standardDeviationMultiplier: Number(form.bollinger_std),
+        },
       }[form.strategy_type];
 
       const response = await fetch("/api/backtests", {
@@ -307,7 +343,6 @@ export default function BacktestsPage() {
   };
 
   const selectedReturn = Number(selectedRun?.total_return_percent ?? 0);
-  const selectedParameters = selectedRun?.parameters || {};
 
   return (
     <div className="space-y-6">
@@ -369,6 +404,13 @@ export default function BacktestsPage() {
                     </SelectItem>
                     <SelectItem value="RSI_REVERSION">RSI 反轉策略</SelectItem>
                     <SelectItem value="BREAKOUT">價格突破策略</SelectItem>
+                    <SelectItem value="BUY_AND_HOLD">買入持有策略</SelectItem>
+                    <SelectItem value="MA_CROSS_WITH_STOP_LOSS">
+                      均線交叉 + 停損
+                    </SelectItem>
+                    <SelectItem value="BOLLINGER_REVERSION">
+                      布林通道反轉策略
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -502,6 +544,91 @@ export default function BacktestsPage() {
                     }
                     className="border-slate-600 bg-slate-900 text-slate-100"
                   />
+                </div>
+              )}
+              {form.strategy_type === "MA_CROSS_WITH_STOP_LOSS" && (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">短均線</label>
+                    <Input
+                      type="number"
+                      min="2"
+                      value={form.short_window}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          short_window: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">長均線</label>
+                    <Input
+                      type="number"
+                      min="3"
+                      value={form.long_window}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          long_window: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">停損 (%)</label>
+                    <Input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={form.stop_loss_percent}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          stop_loss_percent: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                </div>
+              )}
+              {form.strategy_type === "BOLLINGER_REVERSION" && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">布林週期</label>
+                    <Input
+                      type="number"
+                      min="2"
+                      value={form.bollinger_window}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          bollinger_window: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">標準差倍數</label>
+                    <Input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={form.bollinger_std}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          bollinger_std: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
                 </div>
               )}
               <div className="space-y-2">
@@ -793,13 +920,7 @@ export default function BacktestsPage() {
                     </p>
                   </div>
                   <Badge className="border-slate-600 bg-slate-700/60 text-slate-200">
-                    {selectedRun.strategy_type === "MOVING_AVERAGE_CROSS"
-                      ? `${selectedParameters.shortWindow ?? selectedRun.short_window}/${
-                          selectedParameters.longWindow ?? selectedRun.long_window
-                        } MA`
-                      : selectedRun.strategy_type === "RSI_REVERSION"
-                        ? `RSI ${selectedParameters.rsiWindow}`
-                        : `突破 ${selectedParameters.lookbackWindow} 日`}
+                    {getStrategyParameterLabel(selectedRun)}
                   </Badge>
                 </div>
                 <div className="h-72">
