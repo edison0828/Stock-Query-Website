@@ -11,6 +11,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Settings,
+  GitCompare,
 } from "lucide-react";
 import {
   LineChart,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -47,6 +49,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+const COMPARISON_COLORS = ["#38bdf8", "#34d399", "#f59e0b", "#f472b6", "#a78bfa"];
 
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
@@ -118,6 +122,29 @@ function getStrategyParameterLabel(run) {
   }
 }
 
+function buildComparisonChartData(runs) {
+  const pointsByDate = new Map();
+
+  for (const run of runs) {
+    const initialCapital = Number(run.initial_capital || 0);
+
+    for (const point of run.equity_curve || []) {
+      if (!pointsByDate.has(point.date)) {
+        pointsByDate.set(point.date, { date: point.date });
+      }
+
+      pointsByDate.get(point.date)[`run_${run.backtest_run_id}`] =
+        initialCapital > 0
+          ? ((Number(point.value) - initialCapital) / initialCapital) * 100
+          : null;
+    }
+  }
+
+  return Array.from(pointsByDate.values()).sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+}
+
 export default function BacktestsPage() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
@@ -153,6 +180,9 @@ export default function BacktestsPage() {
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [comparisonIds, setComparisonIds] = useState([]);
+  const [comparisonDetails, setComparisonDetails] = useState({});
+  const [loadingComparisonIds, setLoadingComparisonIds] = useState([]);
 
   const fetchRuns = useCallback(async () => {
     setIsLoadingRuns(true);
@@ -213,6 +243,42 @@ export default function BacktestsPage() {
       }
     },
     [toast]
+  );
+
+  const fetchComparisonDetail = useCallback(
+    async (runId) => {
+      if (!runId || comparisonDetails[runId]) {
+        return true;
+      }
+
+      setLoadingComparisonIds((current) => [...new Set([...current, runId])]);
+
+      try {
+        const response = await fetch(`/api/backtests/${runId}`);
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(data.error || "無法載入比較資料");
+        }
+
+        setComparisonDetails((current) => ({
+          ...current,
+          [runId]: data,
+        }));
+        return true;
+      } catch (error) {
+        console.error("Error fetching comparison detail:", error);
+        toast({
+          variant: "destructive",
+          title: "比較資料載入失敗",
+          description: error.message,
+        });
+        return false;
+      } finally {
+        setLoadingComparisonIds((current) => current.filter((id) => id !== runId));
+      }
+    },
+    [comparisonDetails, toast]
   );
 
   useEffect(() => {
@@ -325,6 +391,10 @@ export default function BacktestsPage() {
       ]);
       setSelectedRunId(data.backtest_run_id);
       setSelectedRun(data);
+      setComparisonDetails((current) => ({
+        ...current,
+        [data.backtest_run_id]: data,
+      }));
 
       toast({
         title: "回測完成",
@@ -343,6 +413,46 @@ export default function BacktestsPage() {
   };
 
   const selectedReturn = Number(selectedRun?.total_return_percent ?? 0);
+  const comparisonRuns = comparisonIds
+    .map((runId) => comparisonDetails[runId])
+    .filter(Boolean);
+  const comparisonChartData = buildComparisonChartData(comparisonRuns);
+  const bestTotalReturn = Math.max(
+    ...comparisonRuns.map((run) => Number(run.total_return_percent ?? -Infinity))
+  );
+  const bestDrawdown = Math.min(
+    ...comparisonRuns.map((run) => Math.abs(Number(run.max_drawdown_percent ?? Infinity)))
+  );
+  const bestProfitFactor = Math.max(
+    ...comparisonRuns.map((run) => Number(run.profit_factor ?? -Infinity))
+  );
+
+  const handleToggleComparison = async (runId, checked) => {
+    if (!checked) {
+      setComparisonIds((current) => current.filter((id) => id !== runId));
+      return;
+    }
+
+    if (comparisonIds.includes(runId)) {
+      return;
+    }
+
+    if (comparisonIds.length >= COMPARISON_COLORS.length) {
+      toast({
+        variant: "destructive",
+        title: "比較數量已滿",
+        description: `最多同時比較 ${COMPARISON_COLORS.length} 筆回測。`,
+      });
+      return;
+    }
+
+    setComparisonIds((current) => [...current, runId]);
+    const loaded = await fetchComparisonDetail(runId);
+
+    if (!loaded) {
+      setComparisonIds((current) => current.filter((id) => id !== runId));
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -782,10 +892,17 @@ export default function BacktestsPage() {
             ) : (
               <div className="space-y-3">
                 {runs.map((run) => (
-                  <button
+                  <div
                     key={run.backtest_run_id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSelectedRunId(run.backtest_run_id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedRunId(run.backtest_run_id);
+                      }
+                    }}
                     className={`w-full rounded-lg border p-4 text-left transition ${
                       selectedRunId === run.backtest_run_id
                         ? "border-blue-500/40 bg-blue-500/10"
@@ -794,9 +911,26 @@ export default function BacktestsPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="font-medium text-slate-100">
-                          {run.stock_id} {run.company_name ? `· ${run.company_name}` : ""}
-                        </p>
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            checked={comparisonIds.includes(run.backtest_run_id)}
+                            disabled={loadingComparisonIds.includes(
+                              run.backtest_run_id
+                            )}
+                            onClick={(event) => event.stopPropagation()}
+                            onCheckedChange={(checked) =>
+                              handleToggleComparison(
+                                run.backtest_run_id,
+                                Boolean(checked)
+                              )
+                            }
+                            className="border-slate-500 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-600"
+                          />
+                          <p className="font-medium text-slate-100">
+                            {run.stock_id}{" "}
+                            {run.company_name ? `· ${run.company_name}` : ""}
+                          </p>
+                        </div>
                         <p className="text-sm text-slate-400">{run.strategy_name}</p>
                         <p className="mt-1 text-xs text-slate-500">
                           {formatDate(run.start_date)} - {formatDate(run.end_date)}
@@ -812,13 +946,165 @@ export default function BacktestsPage() {
                         {formatPercent(run.total_return_percent)}
                       </Badge>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-slate-700 bg-slate-800 text-slate-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-slate-100">
+            <GitCompare className="h-5 w-5 text-cyan-400" />
+            回測比較
+          </CardTitle>
+          <CardDescription className="text-slate-400">
+            勾選最近回測中的多筆結果，直接比較不同策略或參數的累積報酬與風險指標。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {comparisonIds.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-400">
+              從最近回測勾選 2 到 {COMPARISON_COLORS.length} 筆資料後即可比較。
+            </div>
+          ) : comparisonRuns.length !== comparisonIds.length ? (
+            <div className="flex items-center justify-center py-10 text-slate-400">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              載入比較資料中...
+            </div>
+          ) : comparisonRuns.length < 2 ? (
+            <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-400">
+              再勾選一筆回測即可形成比較。
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {comparisonRuns.map((run, index) => (
+                  <Badge
+                    key={run.backtest_run_id}
+                    className="border-slate-600 bg-slate-900 text-slate-100"
+                    style={{ borderColor: COMPARISON_COLORS[index] }}
+                  >
+                    {run.stock_id} · {getStrategyParameterLabel(run)}
+                  </Badge>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={comparisonChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <XAxis dataKey="date" stroke="#94a3b8" minTickGap={24} />
+                      <YAxis
+                        stroke="#94a3b8"
+                        tickFormatter={(value) => `${Number(value).toFixed(0)}%`}
+                      />
+                      <Tooltip
+                        formatter={(value) => formatPercent(value)}
+                        labelFormatter={(label) => `日期 ${label}`}
+                      />
+                      {comparisonRuns.map((run, index) => (
+                        <Line
+                          key={run.backtest_run_id}
+                          type="monotone"
+                          dataKey={`run_${run.backtest_run_id}`}
+                          name={`${run.stock_id} ${getStrategyParameterLabel(run)}`}
+                          stroke={COMPARISON_COLORS[index]}
+                          strokeWidth={2}
+                          dot={false}
+                          connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-slate-700 hover:bg-slate-700/30">
+                    <TableHead className="text-slate-400">策略</TableHead>
+                    <TableHead className="text-slate-400">區間</TableHead>
+                    <TableHead className="text-slate-400">總報酬</TableHead>
+                    <TableHead className="text-slate-400">年化</TableHead>
+                    <TableHead className="text-slate-400">最大回撤</TableHead>
+                    <TableHead className="text-slate-400">勝率</TableHead>
+                    <TableHead className="text-slate-400">Profit Factor</TableHead>
+                    <TableHead className="text-slate-400">交易</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {comparisonRuns.map((run) => {
+                    const totalReturn = Number(run.total_return_percent ?? 0);
+                    const drawdown = Math.abs(Number(run.max_drawdown_percent ?? 0));
+                    const profitFactor = Number(run.profit_factor ?? 0);
+
+                    return (
+                      <TableRow
+                        key={run.backtest_run_id}
+                        className="border-slate-700 hover:bg-slate-700/30"
+                      >
+                        <TableCell className="text-slate-200">
+                          <div className="font-medium">
+                            {run.stock_id} {run.company_name}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {run.strategy_name}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-400">
+                          {formatDate(run.start_date)} - {formatDate(run.end_date)}
+                        </TableCell>
+                        <TableCell
+                          className={
+                            totalReturn === bestTotalReturn
+                              ? "font-semibold text-emerald-300"
+                              : totalReturn >= 0
+                                ? "text-emerald-400"
+                                : "text-rose-400"
+                          }
+                        >
+                          {formatPercent(run.total_return_percent)}
+                        </TableCell>
+                        <TableCell className="text-slate-200">
+                          {formatPercent(run.annualized_return_percent)}
+                        </TableCell>
+                        <TableCell
+                          className={
+                            drawdown === bestDrawdown
+                              ? "font-semibold text-emerald-300"
+                              : "text-amber-300"
+                          }
+                        >
+                          {formatPercent(-drawdown)}
+                        </TableCell>
+                        <TableCell className="text-slate-200">
+                          {formatPercent(run.win_rate_percent)}
+                        </TableCell>
+                        <TableCell
+                          className={
+                            profitFactor === bestProfitFactor
+                              ? "font-semibold text-emerald-300"
+                              : "text-slate-200"
+                          }
+                        >
+                          {formatNumber(run.profit_factor)}
+                        </TableCell>
+                        <TableCell className="text-slate-300">
+                          {run.trade_count}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-slate-700 bg-slate-800 text-slate-200">
         <CardHeader>
