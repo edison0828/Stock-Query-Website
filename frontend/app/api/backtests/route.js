@@ -7,7 +7,9 @@ import {
   BacktestEngine,
   BacktestMarketDataService,
   BacktestValidationError,
-  MovingAverageCrossStrategy,
+  BrokerageFeeModel,
+  ExecutionPolicy,
+  StrategyFactory,
 } from "@/lib/domain/backtests";
 
 const marketDataService = new BacktestMarketDataService(prisma);
@@ -44,6 +46,13 @@ function formatRunSummary(run) {
     trade_count: run.trade_count,
     signal_count: run.signal_count,
     created_at: run.created_at,
+    parameters: run.parameters ?? null,
+    execution_config: run.execution_config ?? null,
+    annualized_return_percent: toNumber(run.annualized_return_percent),
+    profit_factor: toNumber(run.profit_factor),
+    average_win_percent: toNumber(run.average_win_percent),
+    average_loss_percent: toNumber(run.average_loss_percent),
+    max_consecutive_losses: run.max_consecutive_losses,
   };
 }
 
@@ -67,8 +76,53 @@ function formatRunDetail(run) {
       pnl_amount: trade.pnl_amount === null ? null : Number(trade.pnl_amount),
       return_percent:
         trade.return_percent === null ? null : toNumber(trade.return_percent),
+      gross_amount: trade.gross_amount === null ? null : Number(trade.gross_amount),
+      fee_amount: trade.fee_amount === null ? null : Number(trade.fee_amount),
+      tax_amount: trade.tax_amount === null ? null : Number(trade.tax_amount),
+      net_amount: trade.net_amount === null ? null : Number(trade.net_amount),
+      position_after:
+        trade.position_after === null ? null : Number(trade.position_after),
       reason: trade.reason,
     })),
+  };
+}
+
+function normalizeStrategyParameters(strategyType, body) {
+  const parameters = body.parameters || {};
+
+  if (strategyType === "MOVING_AVERAGE_CROSS") {
+    return {
+      shortWindow: Number(parameters.shortWindow ?? body.short_window),
+      longWindow: Number(parameters.longWindow ?? body.long_window),
+    };
+  }
+
+  if (strategyType === "RSI_REVERSION") {
+    return {
+      rsiWindow: Number(parameters.rsiWindow),
+      oversoldThreshold: Number(parameters.oversoldThreshold),
+      overboughtThreshold: Number(parameters.overboughtThreshold),
+    };
+  }
+
+  if (strategyType === "BREAKOUT") {
+    return {
+      lookbackWindow: Number(parameters.lookbackWindow),
+    };
+  }
+
+  return parameters;
+}
+
+function normalizeExecutionConfig(body) {
+  const config = body.execution_config || {};
+
+  return {
+    sizingMode: config.sizingMode || "FULL_CAPITAL",
+    positionSizePercent: Number(config.positionSizePercent ?? 100),
+    feeRate: Number(config.feeRate ?? 0.001425),
+    sellTaxRate: Number(config.sellTaxRate ?? 0.003),
+    slippageRate: Number(config.slippageRate ?? 0),
   };
 }
 
@@ -123,16 +177,10 @@ export async function POST(request) {
     const strategyType = body.strategy_type;
     const startDate = new Date(body.start_date);
     const endDate = new Date(body.end_date);
-    const shortWindow = Number(body.short_window);
-    const longWindow = Number(body.long_window);
     const initialCapital = Number(body.initial_capital);
 
     if (!stockId || !strategyType || !body.start_date || !body.end_date) {
       throw new BacktestValidationError("缺少必要的回測參數");
-    }
-
-    if (strategyType !== "MOVING_AVERAGE_CROSS") {
-      throw new BacktestValidationError("目前僅支援均線交叉策略");
     }
 
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
@@ -159,10 +207,13 @@ export async function POST(request) {
       });
     }
 
-    const strategy = new MovingAverageCrossStrategy({
-      shortWindow,
-      longWindow,
+    const strategy = StrategyFactory.create({
+      type: strategyType,
+      parameters: normalizeStrategyParameters(strategyType, body),
     });
+    const executionConfig = normalizeExecutionConfig(body);
+    const executionPolicy = new ExecutionPolicy(executionConfig);
+    const brokerageFeeModel = new BrokerageFeeModel(executionConfig);
     const priceSeries = await marketDataService.getPriceSeries(stockId, {
       startDate,
       endDate,
@@ -171,6 +222,8 @@ export async function POST(request) {
       strategy,
       priceSeries,
       initialCapital,
+      executionPolicy,
+      brokerageFeeModel,
     });
 
     const createdRun = await prisma.backtestruns.create({
@@ -190,6 +243,13 @@ export async function POST(request) {
         signal_count: result.signalCount,
         short_window: result.shortWindow,
         long_window: result.longWindow,
+        parameters: result.parameters,
+        execution_config: result.executionConfig,
+        annualized_return_percent: result.performance.annualizedReturnPercent,
+        profit_factor: result.performance.profitFactor,
+        average_win_percent: result.performance.averageWinPercent,
+        average_loss_percent: result.performance.averageLossPercent,
+        max_consecutive_losses: result.performance.maxConsecutiveLosses,
         equity_curve: result.equityCurve,
         backtesttrades: {
           create: result.trades.map((trade) => trade.toPersistence()),

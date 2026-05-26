@@ -1,13 +1,21 @@
 import { BacktestValidationError } from "./errors";
-import { BacktestTrade } from "./BacktestTrade";
 import { PerformanceReport } from "./PerformanceReport";
+import { BacktestPortfolio } from "./execution/BacktestPortfolio";
+import { BrokerageFeeModel } from "./execution/BrokerageFeeModel";
+import { ExecutionPolicy } from "./execution/ExecutionPolicy";
 
 function roundNumber(value, digits = 6) {
   return Number(value.toFixed(digits));
 }
 
 export class BacktestEngine {
-  run({ strategy, priceSeries, initialCapital }) {
+  run({
+    strategy,
+    priceSeries,
+    initialCapital,
+    executionPolicy = new ExecutionPolicy(),
+    brokerageFeeModel = new BrokerageFeeModel(),
+  }) {
     if (!Array.isArray(priceSeries) || priceSeries.length === 0) {
       throw new BacktestValidationError("沒有可用的歷史股價資料");
     }
@@ -16,8 +24,8 @@ export class BacktestEngine {
       throw new BacktestValidationError("初始資金必須大於 0");
     }
 
-    if (priceSeries.length <= strategy.longWindow) {
-      throw new BacktestValidationError("歷史資料長度不足以支援目前的均線參數");
+    if (priceSeries.length <= strategy.getWarmupPeriod()) {
+      throw new BacktestValidationError("歷史資料長度不足以支援目前的策略參數");
     }
 
     const signals = strategy.generateSignals(priceSeries);
@@ -27,99 +35,68 @@ export class BacktestEngine {
 
     const trades = [];
     const equityCurve = [];
-    let cash = initialCapital;
-    let quantity = 0;
-    let entryCost = 0;
+    const portfolio = new BacktestPortfolio({ initialCapital });
 
     for (const point of priceSeries) {
       const dateKey = point.getDateKey();
       const signal = signalsByDate.get(dateKey);
 
-      if (signal?.type === "BUY" && quantity === 0 && point.closePrice > 0) {
-        quantity = cash / point.closePrice;
-        entryCost = cash;
-        cash = 0;
+      if (signal?.type === "BUY" && !portfolio.hasPosition()) {
+        const trade = portfolio.buy({
+          date: point.date,
+          price: point.closePrice,
+          budget: executionPolicy.getBuyBudget(portfolio.cash),
+          feeModel: brokerageFeeModel,
+          reason: signal.reason,
+        });
 
-        const equityAfter = quantity * point.closePrice;
-        trades.push(
-          new BacktestTrade({
-            tradeType: "BUY",
-            tradeDate: point.date,
-            price: point.closePrice,
-            quantity,
-            cashAfter: cash,
-            equityAfter,
-            reason: signal.reason,
-          })
-        );
-      } else if (signal?.type === "SELL" && quantity > 0) {
-        const proceeds = quantity * point.closePrice;
-        const pnlAmount = proceeds - entryCost;
-        const returnPercent = entryCost === 0 ? 0 : (pnlAmount / entryCost) * 100;
+        if (trade) {
+          trades.push(trade);
+        }
+      } else if (signal?.type === "SELL" && portfolio.hasPosition()) {
+        const trade = portfolio.sellAll({
+          date: point.date,
+          price: point.closePrice,
+          feeModel: brokerageFeeModel,
+          reason: signal.reason,
+        });
 
-        cash = proceeds;
-        quantity = 0;
-        entryCost = 0;
-
-        trades.push(
-          new BacktestTrade({
-            tradeType: "SELL",
-            tradeDate: point.date,
-            price: point.closePrice,
-            quantity: proceeds / point.closePrice,
-            cashAfter: cash,
-            equityAfter: cash,
-            pnlAmount,
-            returnPercent,
-            reason: signal.reason,
-          })
-        );
+        if (trade) {
+          trades.push(trade);
+        }
       }
 
-      const equityValue = cash + quantity * point.closePrice;
       equityCurve.push({
         date: dateKey,
-        value: roundNumber(equityValue),
+        value: roundNumber(portfolio.getEquity(point.closePrice)),
       });
     }
 
     const lastPoint = priceSeries[priceSeries.length - 1];
 
-    if (quantity > 0) {
-      const proceeds = quantity * lastPoint.closePrice;
-      const pnlAmount = proceeds - entryCost;
-      const returnPercent = entryCost === 0 ? 0 : (pnlAmount / entryCost) * 100;
-      const soldQuantity = quantity;
+    if (portfolio.hasPosition()) {
+      const trade = portfolio.sellAll({
+        date: lastPoint.date,
+        price: lastPoint.closePrice,
+        feeModel: brokerageFeeModel,
+        reason: "回測結束強制平倉",
+      });
 
-      cash = proceeds;
-      quantity = 0;
-      entryCost = 0;
-
-      trades.push(
-        new BacktestTrade({
-          tradeType: "SELL",
-          tradeDate: lastPoint.date,
-          price: lastPoint.closePrice,
-          quantity: soldQuantity,
-          cashAfter: cash,
-          equityAfter: cash,
-          pnlAmount,
-          returnPercent,
-          reason: "回測結束強制平倉",
-        })
-      );
+      if (trade) {
+        trades.push(trade);
+      }
 
       if (equityCurve.length > 0) {
         equityCurve[equityCurve.length - 1] = {
           date: lastPoint.getDateKey(),
-          value: roundNumber(cash),
+          value: roundNumber(portfolio.cash),
         };
       }
     }
 
     const performance = PerformanceReport.fromBacktest({
       initialCapital,
-      finalValue: cash,
+      finalValue: portfolio.cash,
       equityCurve,
       trades,
     });
@@ -127,8 +104,13 @@ export class BacktestEngine {
     return {
       strategyType: strategy.type,
       strategyName: strategy.name,
-      shortWindow: strategy.shortWindow,
-      longWindow: strategy.longWindow,
+      parameters: strategy.parameters,
+      executionConfig: {
+        ...executionPolicy.toConfig(),
+        ...brokerageFeeModel.toConfig(),
+      },
+      shortWindow: strategy.parameters.shortWindow ?? null,
+      longWindow: strategy.parameters.longWindow ?? null,
       initialCapital: roundNumber(initialCapital),
       signalCount: signals.length,
       equityCurve,

@@ -351,27 +351,34 @@ model notifications {
 }
 
 model backtestruns {
-  backtest_run_id      BigInt                 @id @default(autoincrement())
-  user_id              BigInt
-  stock_id             String                 @db.VarChar(20)
-  strategy_type        backtest_strategy_type
-  strategy_name        String                 @db.VarChar(100)
-  start_date           DateTime               @db.Date
-  end_date             DateTime               @db.Date
-  initial_capital      Decimal                @db.Decimal(18, 6)
-  final_value          Decimal                @db.Decimal(18, 6)
-  total_return_percent Decimal                @db.Decimal(10, 4)
-  max_drawdown_percent Decimal                @db.Decimal(10, 4)
-  win_rate_percent     Decimal                @db.Decimal(10, 4)
-  trade_count          Int
-  signal_count         Int
-  short_window         Int
-  long_window          Int
-  equity_curve         Json?
-  created_at           DateTime               @default(now()) @db.Timestamp(0)
-  backtesttrades       backtesttrades[]
-  stocks               stocks                 @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_BacktestRuns_Stocks1")
-  users                users                  @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_BacktestRuns_Users1")
+  backtest_run_id           BigInt                 @id @default(autoincrement())
+  user_id                   BigInt
+  stock_id                  String                 @db.VarChar(20)
+  strategy_type             backtest_strategy_type
+  strategy_name             String                 @db.VarChar(100)
+  start_date                DateTime               @db.Date
+  end_date                  DateTime               @db.Date
+  initial_capital           Decimal                @db.Decimal(18, 6)
+  final_value               Decimal                @db.Decimal(18, 6)
+  total_return_percent      Decimal                @db.Decimal(10, 4)
+  max_drawdown_percent      Decimal                @db.Decimal(10, 4)
+  win_rate_percent          Decimal                @db.Decimal(10, 4)
+  trade_count               Int
+  signal_count              Int
+  short_window              Int?
+  long_window               Int?
+  parameters                Json?
+  execution_config          Json?
+  annualized_return_percent Decimal?               @db.Decimal(10, 4)
+  profit_factor             Decimal?               @db.Decimal(10, 4)
+  average_win_percent       Decimal?               @db.Decimal(10, 4)
+  average_loss_percent      Decimal?               @db.Decimal(10, 4)
+  max_consecutive_losses    Int?
+  equity_curve              Json?
+  created_at                DateTime               @default(now()) @db.Timestamp(0)
+  backtesttrades            backtesttrades[]
+  stocks                    stocks                 @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade, map: "fk_BacktestRuns_Stocks1")
+  users                     users                  @relation(fields: [user_id], references: [user_id], onDelete: Cascade, map: "fk_BacktestRuns_Users1")
 
   @@index([stock_id], map: "fk_BacktestRuns_Stocks1_idx")
   @@index([user_id, created_at(sort: Desc)], map: "idx_backtestruns_user_created")
@@ -388,6 +395,11 @@ model backtesttrades {
   equity_after      Decimal             @db.Decimal(18, 6)
   pnl_amount        Decimal?            @db.Decimal(18, 6)
   return_percent    Decimal?            @db.Decimal(10, 4)
+  gross_amount      Decimal?            @db.Decimal(18, 6)
+  fee_amount        Decimal?            @db.Decimal(18, 6)
+  tax_amount        Decimal?            @db.Decimal(18, 6)
+  net_amount        Decimal?            @db.Decimal(18, 6)
+  position_after    Decimal?            @db.Decimal(18, 6)
   reason            String?             @db.VarChar(255)
   backtestruns      backtestruns        @relation(fields: [backtest_run_id], references: [backtest_run_id], onDelete: Cascade, map: "fk_BacktestTrades_BacktestRuns1")
 
@@ -408,6 +420,8 @@ enum alert_rule_type {
 
 enum backtest_strategy_type {
   MOVING_AVERAGE_CROSS
+  RSI_REVERSION
+  BREAKOUT
 }
 
 enum backtest_trade_type {

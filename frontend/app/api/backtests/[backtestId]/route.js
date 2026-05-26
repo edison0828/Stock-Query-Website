@@ -25,6 +25,13 @@ function formatRunDetail(run) {
     win_rate_percent: toNumber(run.win_rate_percent),
     trade_count: run.trade_count,
     signal_count: run.signal_count,
+    parameters: run.parameters ?? null,
+    execution_config: run.execution_config ?? null,
+    annualized_return_percent: toNumber(run.annualized_return_percent),
+    profit_factor: toNumber(run.profit_factor),
+    average_win_percent: toNumber(run.average_win_percent),
+    average_loss_percent: toNumber(run.average_loss_percent),
+    max_consecutive_losses: run.max_consecutive_losses,
     equity_curve: Array.isArray(run.equity_curve)
       ? run.equity_curve.map((point) => ({
           date: point.date,
@@ -42,6 +49,12 @@ function formatRunDetail(run) {
       pnl_amount: trade.pnl_amount === null ? null : Number(trade.pnl_amount),
       return_percent:
         trade.return_percent === null ? null : toNumber(trade.return_percent),
+      gross_amount: trade.gross_amount === null ? null : Number(trade.gross_amount),
+      fee_amount: trade.fee_amount === null ? null : Number(trade.fee_amount),
+      tax_amount: trade.tax_amount === null ? null : Number(trade.tax_amount),
+      net_amount: trade.net_amount === null ? null : Number(trade.net_amount),
+      position_after:
+        trade.position_after === null ? null : Number(trade.position_after),
       reason: trade.reason,
     })),
     created_at: run.created_at,

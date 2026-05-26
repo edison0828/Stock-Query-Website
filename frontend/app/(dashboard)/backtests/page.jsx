@@ -10,6 +10,7 @@ import {
   Activity,
   ArrowUpRight,
   ArrowDownRight,
+  Settings,
 } from "lucide-react";
 import {
   LineChart,
@@ -67,6 +68,14 @@ function formatPercent(value) {
   return `${numericValue >= 0 ? "+" : ""}${numericValue.toFixed(2)}%`;
 }
 
+function formatNumber(value, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "N/A";
+  }
+
+  return Number(value).toFixed(digits);
+}
+
 function formatDate(value) {
   if (!value) {
     return "N/A";
@@ -101,7 +110,16 @@ export default function BacktestsPage() {
     end_date: getDefaultEndDate(),
     short_window: "5",
     long_window: "20",
+    rsi_window: "14",
+    oversold_threshold: "30",
+    overbought_threshold: "70",
+    lookback_window: "20",
     initial_capital: "100000",
+    sizing_mode: "FULL_CAPITAL",
+    position_size_percent: "100",
+    fee_rate: "0.001425",
+    sell_tax_rate: "0.003",
+    slippage_rate: "0",
   });
   const [runs, setRuns] = useState([]);
   const [selectedRunId, setSelectedRunId] = useState(null);
@@ -197,6 +215,21 @@ export default function BacktestsPage() {
     setIsSubmitting(true);
 
     try {
+      const strategyParameters = {
+        MOVING_AVERAGE_CROSS: {
+          shortWindow: Number(form.short_window),
+          longWindow: Number(form.long_window),
+        },
+        RSI_REVERSION: {
+          rsiWindow: Number(form.rsi_window),
+          oversoldThreshold: Number(form.oversold_threshold),
+          overboughtThreshold: Number(form.overbought_threshold),
+        },
+        BREAKOUT: {
+          lookbackWindow: Number(form.lookback_window),
+        },
+      }[form.strategy_type];
+
       const response = await fetch("/api/backtests", {
         method: "POST",
         headers: {
@@ -207,9 +240,15 @@ export default function BacktestsPage() {
           strategy_type: form.strategy_type,
           start_date: form.start_date,
           end_date: form.end_date,
-          short_window: Number(form.short_window),
-          long_window: Number(form.long_window),
           initial_capital: Number(form.initial_capital),
+          parameters: strategyParameters,
+          execution_config: {
+            sizingMode: form.sizing_mode,
+            positionSizePercent: Number(form.position_size_percent),
+            feeRate: Number(form.fee_rate),
+            sellTaxRate: Number(form.sell_tax_rate),
+            slippageRate: Number(form.slippage_rate),
+          },
         }),
       });
 
@@ -237,6 +276,13 @@ export default function BacktestsPage() {
           win_rate_percent: data.win_rate_percent,
           trade_count: data.trade_count,
           signal_count: data.signal_count,
+          parameters: data.parameters,
+          execution_config: data.execution_config,
+          annualized_return_percent: data.annualized_return_percent,
+          profit_factor: data.profit_factor,
+          average_win_percent: data.average_win_percent,
+          average_loss_percent: data.average_loss_percent,
+          max_consecutive_losses: data.max_consecutive_losses,
           created_at: data.created_at,
         },
         ...current,
@@ -261,6 +307,7 @@ export default function BacktestsPage() {
   };
 
   const selectedReturn = Number(selectedRun?.total_return_percent ?? 0);
+  const selectedParameters = selectedRun?.parameters || {};
 
   return (
     <div className="space-y-6">
@@ -320,6 +367,8 @@ export default function BacktestsPage() {
                     <SelectItem value="MOVING_AVERAGE_CROSS">
                       均線交叉策略
                     </SelectItem>
+                    <SelectItem value="RSI_REVERSION">RSI 反轉策略</SelectItem>
+                    <SelectItem value="BREAKOUT">價格突破策略</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -353,38 +402,108 @@ export default function BacktestsPage() {
                   />
                 </div>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
+              {form.strategy_type === "MOVING_AVERAGE_CROSS" && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">短均線</label>
+                    <Input
+                      type="number"
+                      min="2"
+                      value={form.short_window}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          short_window: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">長均線</label>
+                    <Input
+                      type="number"
+                      min="3"
+                      value={form.long_window}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          long_window: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                </div>
+              )}
+              {form.strategy_type === "RSI_REVERSION" && (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">RSI 週期</label>
+                    <Input
+                      type="number"
+                      min="2"
+                      value={form.rsi_window}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          rsi_window: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">超賣門檻</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={form.oversold_threshold}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          oversold_threshold: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">超買門檻</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={form.overbought_threshold}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          overbought_threshold: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-900 text-slate-100"
+                    />
+                  </div>
+                </div>
+              )}
+              {form.strategy_type === "BREAKOUT" && (
                 <div className="space-y-2">
-                  <label className="text-sm text-slate-300">短均線</label>
+                  <label className="text-sm text-slate-300">突破觀察天數</label>
                   <Input
                     type="number"
                     min="2"
-                    value={form.short_window}
+                    value={form.lookback_window}
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
-                        short_window: event.target.value,
+                        lookback_window: event.target.value,
                       }))
                     }
                     className="border-slate-600 bg-slate-900 text-slate-100"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm text-slate-300">長均線</label>
-                  <Input
-                    type="number"
-                    min="3"
-                    value={form.long_window}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        long_window: event.target.value,
-                      }))
-                    }
-                    className="border-slate-600 bg-slate-900 text-slate-100"
-                  />
-                </div>
-              </div>
+              )}
               <div className="space-y-2">
                 <label className="text-sm text-slate-300">初始資金</label>
                 <Input
@@ -400,6 +519,98 @@ export default function BacktestsPage() {
                   }
                   className="border-slate-600 bg-slate-900 text-slate-100"
                 />
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+                <div className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-200">
+                  <Settings className="h-4 w-4 text-slate-400" />
+                  交易設定
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">資金投入方式</label>
+                    <Select
+                      value={form.sizing_mode}
+                      onValueChange={(value) =>
+                        setForm((current) => ({ ...current, sizing_mode: value }))
+                      }
+                    >
+                      <SelectTrigger className="border-slate-600 bg-slate-950 text-slate-100">
+                        <SelectValue placeholder="選擇投入方式" />
+                      </SelectTrigger>
+                      <SelectContent className="border-slate-700 bg-slate-800 text-slate-100">
+                        <SelectItem value="FULL_CAPITAL">滿倉投入</SelectItem>
+                        <SelectItem value="PERCENT_OF_CASH">現金比例投入</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">投入比例 (%)</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={form.position_size_percent}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          position_size_percent: event.target.value,
+                        }))
+                      }
+                      disabled={form.sizing_mode === "FULL_CAPITAL"}
+                      className="border-slate-600 bg-slate-950 text-slate-100 disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">手續費率</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.000001"
+                      value={form.fee_rate}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          fee_rate: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-950 text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">賣出交易稅</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.000001"
+                      value={form.sell_tax_rate}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          sell_tax_rate: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-950 text-slate-100"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-300">滑價率</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.000001"
+                      value={form.slippage_rate}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          slippage_rate: event.target.value,
+                        }))
+                      }
+                      className="border-slate-600 bg-slate-950 text-slate-100"
+                    />
+                  </div>
+                </div>
               </div>
               <Button
                 type="submit"
@@ -501,7 +712,7 @@ export default function BacktestsPage() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
                 <Card className="border-slate-700 bg-slate-900/50">
                   <CardContent className="p-4">
                     <p className="text-xs text-slate-400">總報酬率</p>
@@ -521,6 +732,20 @@ export default function BacktestsPage() {
                 </Card>
                 <Card className="border-slate-700 bg-slate-900/50">
                   <CardContent className="p-4">
+                    <p className="text-xs text-slate-400">年化報酬率</p>
+                    <p
+                      className={`mt-2 text-2xl font-semibold ${
+                        Number(selectedRun.annualized_return_percent ?? 0) >= 0
+                          ? "text-emerald-400"
+                          : "text-rose-400"
+                      }`}
+                    >
+                      {formatPercent(selectedRun.annualized_return_percent)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="border-slate-700 bg-slate-900/50">
+                  <CardContent className="p-4">
                     <p className="text-xs text-slate-400">最終資產</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-100">
                       {formatCurrency(selectedRun.final_value)}
@@ -532,6 +757,14 @@ export default function BacktestsPage() {
                     <p className="text-xs text-slate-400">最大回撤</p>
                     <p className="mt-2 text-2xl font-semibold text-amber-300">
                       {formatPercent(-Math.abs(Number(selectedRun.max_drawdown_percent)))}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="border-slate-700 bg-slate-900/50">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-slate-400">Profit Factor</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-100">
+                      {formatNumber(selectedRun.profit_factor)}
                     </p>
                   </CardContent>
                 </Card>
@@ -560,7 +793,13 @@ export default function BacktestsPage() {
                     </p>
                   </div>
                   <Badge className="border-slate-600 bg-slate-700/60 text-slate-200">
-                    {selectedRun.short_window}/{selectedRun.long_window} MA
+                    {selectedRun.strategy_type === "MOVING_AVERAGE_CROSS"
+                      ? `${selectedParameters.shortWindow ?? selectedRun.short_window}/${
+                          selectedParameters.longWindow ?? selectedRun.long_window
+                        } MA`
+                      : selectedRun.strategy_type === "RSI_REVERSION"
+                        ? `RSI ${selectedParameters.rsiWindow}`
+                        : `突破 ${selectedParameters.lookbackWindow} 日`}
                   </Badge>
                 </div>
                 <div className="h-72">
@@ -599,6 +838,7 @@ export default function BacktestsPage() {
                         <TableHead className="text-slate-400">動作</TableHead>
                         <TableHead className="text-slate-400">價格</TableHead>
                         <TableHead className="text-slate-400">數量</TableHead>
+                        <TableHead className="text-slate-400">成本</TableHead>
                         <TableHead className="text-slate-400">損益</TableHead>
                         <TableHead className="text-slate-400">原因</TableHead>
                       </TableRow>
@@ -628,6 +868,14 @@ export default function BacktestsPage() {
                           </TableCell>
                           <TableCell className="text-slate-200">
                             {Number(trade.quantity).toFixed(4)}
+                          </TableCell>
+                          <TableCell className="text-slate-400">
+                            {trade.fee_amount === null && trade.tax_amount === null
+                              ? "N/A"
+                              : formatCurrency(
+                                  Number(trade.fee_amount ?? 0) +
+                                    Number(trade.tax_amount ?? 0)
+                                )}
                           </TableCell>
                           <TableCell
                             className={
