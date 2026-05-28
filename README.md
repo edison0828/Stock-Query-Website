@@ -111,15 +111,65 @@ Stock-Query-Website/
    - `DATABASE_URL` 請替換為實際 MySQL 連線字串。
    - `FINLAB_API_TOKEN` 是完整匯入歷史股價與財報的主要資料來源；若缺少 token，管理員同步的 Auto 模式會改用免費來源。
 
-4. **初始化資料庫結構**
+4. **初始化資料庫結構（沒有備份時使用）**
 
    ```bash
    npm run db:push
    ```
 
+   如果下一步會匯入完整 MySQL dump 備份，可以略過本步，因為 dump 會包含資料表結構與資料。若你是從零建立空資料庫、且沒有可用備份，才需要執行 `npm run db:push`。
+
    目前 repo 內的 `prisma/migrations` 與 `prisma/schema.prisma` 並非完全同步；如果你是從零重建資料庫，請優先使用 `prisma db push`，不要直接用舊 migration 做 fresh bootstrap。
 
-5. **匯入市場資料**
+5. **從 Google Drive 備份還原資料庫（建議）**
+
+   若要在另一台電腦重建出和目前開發機接近的資料庫狀態，建議優先使用 MySQL dump 備份還原。備份檔體積較大，不建議放進 Git repo；可放在 Google Drive，讓新環境下載後匯入。
+
+   備份檔命名建議：
+
+   ```text
+   stock_query_website_YYYYMMDD_HHMMSS_portable.sql.gz
+   ```
+
+   若已將備份檔放在 Google Drive，請先從瀏覽器下載到新電腦，例如放在 `~/Downloads/stock_query_website_YYYYMMDD_HHMMSS_portable.sql.gz`。也可以使用 `gdown` 下載公開或已授權的 Google Drive 檔案：
+
+   ```bash
+   pip install gdown
+   gdown "https://drive.google.com/uc?id=GOOGLE_DRIVE_FILE_ID" \
+     -O ~/Downloads/stock_query_website_YYYYMMDD_HHMMSS_portable.sql.gz
+   ```
+
+   在新電腦建立資料庫與應用程式使用者：
+
+   ```bash
+   mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS stock_query_website CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+   mysql -u root -p -e "CREATE USER IF NOT EXISTS 'stock_query_app'@'localhost' IDENTIFIED BY '請改成你的密碼';"
+   mysql -u root -p -e "GRANT ALL PRIVILEGES ON stock_query_website.* TO 'stock_query_app'@'localhost'; FLUSH PRIVILEGES;"
+   ```
+
+   匯入備份：
+
+   ```bash
+   gunzip -c ~/Downloads/stock_query_website_YYYYMMDD_HHMMSS_portable.sql.gz \
+     | mysql -u stock_query_app -p stock_query_website
+   ```
+
+   匯入後可用以下指令確認資料表與主要歷史價格資料是否存在：
+
+   ```bash
+   mysql -u stock_query_app -p stock_query_website -e "SHOW TABLES;"
+   mysql -u stock_query_app -p stock_query_website -e "SELECT COUNT(*) AS historical_price_rows FROM historicalprices;"
+   ```
+
+   接著在 `frontend/.env.local` 設定和新電腦一致的連線字串：
+
+   ```env
+   DATABASE_URL="mysql://stock_query_app:請改成你的密碼@127.0.0.1:3306/stock_query_website?connection_limit=5"
+   ```
+
+   還原 dump 後通常不需要再跑 `npm run db:push` 或 seed 指令；只有在 schema 有新變更、或你刻意要補最新市場資料時，才需要再執行資料庫同步或匯入流程。
+
+6. **匯入市場資料（沒有備份時使用）**
 
    ```bash
    npm run db:seed:finlab
@@ -160,7 +210,7 @@ Stock-Query-Website/
 
    目前 `stocksplits` 會先保留空表，因為 FinLab 目前主要提供 ETF split 資料，和現有 generic schema 並不完全對應。
 
-6. **後台同步市場資料（選用）**
+7. **後台同步市場資料（選用）**
 
    登入管理員帳號後可進入「市場資料維護」頁面，由 API 執行同步工作，並查看最近同步紀錄與資料品質快照。同步模式支援：
 
@@ -170,7 +220,7 @@ Stock-Query-Website/
 
    完整同步可能需要較久時間，部署環境需具備 `DATABASE_URL`、`uv` 與對應資料來源 token。
 
-7. **啟動開發伺服器**
+8. **啟動開發伺服器**
 
    ```bash
    npm run dev
@@ -178,7 +228,7 @@ Stock-Query-Website/
 
    瀏覽器開啟 [http://localhost:3000](http://localhost:3000) 即可開始使用。修改 `app/page.jsx` 或其他檔案會自動觸發 HMR 更新。
 
-8. **建置與部署（選用）**
+9. **建置與部署（選用）**
    ```bash
    npm run build   # 建置生產版
    npm run start   # 啟動生產伺服器（需事先執行 build）
