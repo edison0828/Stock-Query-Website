@@ -4,6 +4,7 @@
 import Link from "next/link";
 import TradeDialog from "@/components/shared/TradeDialog"; // 模擬買入賣出對話框的組件
 import CandlestickChart from "@/components/stocks/CandlestickChart";
+import TechnicalIndicatorChart from "@/components/stocks/TechnicalIndicatorChart";
 import { useState, useEffect, Suspense } from "react";
 import { useParams } from "next/navigation"; // 用於獲取動態路由參數
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,71 @@ import { Badge } from "@/components/ui/badge";
 
 // 時間區間按鈕
 const timeRanges = ["5D", "1M", "6M", "YTD", "1Y", "5Y", "MAX"];
+
+function toChartNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function average(values) {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function buildPriceOverlayData(data, isEtf, fullData = data) {
+  const windows = {
+    5: [],
+    20: [],
+    60: [],
+  };
+  const visibleTimes = new Set(data.map((point) => point.time));
+  const computedByTime = new Map();
+
+  fullData.forEach((point) => {
+    const chartPrice = toChartNumber(
+      isEtf ? point.price_index ?? point.price : point.price ?? point.close
+    );
+
+    if (chartPrice !== null) {
+      Object.entries(windows).forEach(([windowSize, values]) => {
+        values.push(chartPrice);
+        if (values.length > Number(windowSize)) values.shift();
+      });
+    }
+
+    const ma5 = windows[5].length === 5 ? average(windows[5]) : null;
+    const ma20 = windows[20].length === 20 ? average(windows[20]) : null;
+    const ma60 = windows[60].length === 60 ? average(windows[60]) : null;
+    const standardDeviation =
+      windows[20].length === 20 && ma20 !== null
+        ? Math.sqrt(average(windows[20].map((value) => (value - ma20) ** 2)))
+        : null;
+
+    computedByTime.set(point.time, {
+      ...point,
+      chartPrice,
+      lineMa5: isEtf ? ma5 : toChartNumber(point.ma5) ?? ma5,
+      lineMa20: isEtf ? ma20 : toChartNumber(point.ma20) ?? ma20,
+      lineMa60: isEtf ? ma60 : toChartNumber(point.ma60) ?? ma60,
+      bollingerMiddle: toChartNumber(point.bollinger_middle) ?? ma20,
+      bollingerUpper:
+        toChartNumber(point.bollinger_upper) ??
+        (ma20 !== null && standardDeviation !== null
+          ? ma20 + standardDeviation * 2
+          : null),
+      bollingerLower:
+        toChartNumber(point.bollinger_lower) ??
+        (ma20 !== null && standardDeviation !== null
+          ? ma20 - standardDeviation * 2
+          : null),
+    });
+  });
+
+  return fullData
+    .filter((point) => visibleTimes.has(point.time))
+    .map((point) => computedByTime.get(point.time) || point);
+}
 
 function formatMetric(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
@@ -164,6 +230,7 @@ function StockDetailPageContent() {
   const [error, setError] = useState(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState("1M"); // 預設時間區間
   const [selectedChartType, setSelectedChartType] = useState("candlestick");
+  const [selectedLineOverlay, setSelectedLineOverlay] = useState("movingAverage");
   const [financialChartMode, setFinancialChartMode] = useState("earnings");
   const [isWatched, setIsWatched] = useState(false); // 模擬關注狀態
   const [isTradeDialogOpen, setIsTradeDialogOpen] = useState(false); // 模擬交易對話框狀態
@@ -284,13 +351,19 @@ function StockDetailPageContent() {
     );
   }
 
+  const isEtf = stockData.isEtf || stockData.assetType === "ETF";
   const currentChartData = stockData.historicalData[selectedTimeRange] || [];
+  const fullChartData = stockData.historicalData.MAX || currentChartData;
+  const priceChartData = buildPriceOverlayData(
+    currentChartData,
+    isEtf,
+    fullChartData
+  );
   const priceQuality = stockData.priceQuality || {};
   const technicalSummary = stockData.technicalSummary || {};
   const performanceSummary = stockData.performanceSummary || {};
   const returnSummary = performanceSummary.returns || {};
   const financialTrend = stockData.financialTrend || [];
-  const isEtf = stockData.isEtf || stockData.assetType === "ETF";
   const etfProfile = stockData.etfProfile;
   const etfNavHistory = stockData.etfNavHistory || [];
   const etfHoldings = stockData.etfHoldings || { items: [] };
@@ -655,6 +728,40 @@ function StockDetailPageContent() {
                   線圖
                 </Button>
               </div>
+              {selectedChartType === "line" && (
+                <div className="flex rounded-md border border-slate-600 bg-slate-900/40 p-1">
+                  <Button
+                    type="button"
+                    variant={
+                      selectedLineOverlay === "movingAverage" ? "default" : "ghost"
+                    }
+                    size="sm"
+                    onClick={() => setSelectedLineOverlay("movingAverage")}
+                    className={
+                      selectedLineOverlay === "movingAverage"
+                        ? "h-8 bg-blue-600 px-3 text-white hover:bg-blue-700"
+                        : "h-8 px-3 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                    }
+                  >
+                    均線
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={
+                      selectedLineOverlay === "bollinger" ? "default" : "ghost"
+                    }
+                    size="sm"
+                    onClick={() => setSelectedLineOverlay("bollinger")}
+                    className={
+                      selectedLineOverlay === "bollinger"
+                        ? "h-8 bg-blue-600 px-3 text-white hover:bg-blue-700"
+                        : "h-8 px-3 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                    }
+                  >
+                    布林通道
+                  </Button>
+                </div>
+              )}
               <div className="flex flex-wrap gap-1">
                 {timeRanges.map((range) => (
                   <Button
@@ -677,23 +784,31 @@ function StockDetailPageContent() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="h-[300px] md:h-[400px] p-2 md:p-4">
+        <CardContent className="h-[340px] md:h-[460px] p-2 md:p-4">
           {selectedChartType === "candlestick" ? (
             <CandlestickChart data={currentChartData} />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
-                data={currentChartData}
-                margin={{ top: 5, right: 20, left: -25, bottom: 5 }}
+                data={priceChartData}
+                margin={{ top: 12, right: 26, left: 4, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
-                <XAxis dataKey="date" stroke="#94A3B8" tick={{ fontSize: 12 }} />
+                <XAxis
+                  dataKey="date"
+                  stroke="#94A3B8"
+                  tick={{ fontSize: 10 }}
+                  minTickGap={36}
+                  interval="preserveStartEnd"
+                  height={24}
+                />
                 <YAxis
                   stroke="#94A3B8"
                   tickFormatter={(value) =>
                     isEtf ? value.toFixed(0) : `$${value.toFixed(0)}`
                   }
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 11 }}
+                  width={72}
                   domain={["auto", "auto"]}
                 />
                 <Tooltip
@@ -708,18 +823,18 @@ function StockDetailPageContent() {
                 <Legend wrapperStyle={{ color: "#E2E8F0" }} />
                 <Line
                   type="monotone"
-                  dataKey={isEtf ? "price_index" : "price"}
-                  name={isEtf ? "淨值化走勢" : "Stock Price"}
+                  dataKey="chartPrice"
+                  name={isEtf ? "Price Index" : "Price"}
                   stroke="#3B82F6"
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 6 }}
                 />
-                {!isEtf && (
+                {selectedLineOverlay === "movingAverage" ? (
                   <>
                     <Line
                       type="monotone"
-                      dataKey="ma5"
+                      dataKey="lineMa5"
                       name="MA5"
                       stroke="#f59e0b"
                       strokeWidth={1.5}
@@ -728,7 +843,7 @@ function StockDetailPageContent() {
                     />
                     <Line
                       type="monotone"
-                      dataKey="ma20"
+                      dataKey="lineMa20"
                       name="MA20"
                       stroke="#38bdf8"
                       strokeWidth={1.5}
@@ -737,10 +852,40 @@ function StockDetailPageContent() {
                     />
                     <Line
                       type="monotone"
-                      dataKey="ma60"
+                      dataKey="lineMa60"
                       name="MA60"
                       stroke="#a78bfa"
                       strokeWidth={1.5}
+                      dot={false}
+                      connectNulls
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Line
+                      type="monotone"
+                      dataKey="bollingerUpper"
+                      name="BOLL Upper"
+                      stroke="#f59e0b"
+                      strokeWidth={1.3}
+                      dot={false}
+                      connectNulls
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="bollingerMiddle"
+                      name="BOLL Mid"
+                      stroke="#38bdf8"
+                      strokeWidth={1.3}
+                      dot={false}
+                      connectNulls
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="bollingerLower"
+                      name="BOLL Lower"
+                      stroke="#f59e0b"
+                      strokeWidth={1.3}
                       dot={false}
                       connectNulls
                     />
@@ -752,6 +897,7 @@ function StockDetailPageContent() {
         </CardContent>
       </Card>
       {/* 資訊頁籤 */}
+      <TechnicalIndicatorChart data={currentChartData} fullData={fullChartData} />
       <Tabs
         defaultValue={isEtf ? "etf-profile" : "basic-info"}
         className="w-full"

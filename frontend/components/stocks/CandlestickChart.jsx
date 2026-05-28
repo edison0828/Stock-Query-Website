@@ -13,19 +13,20 @@ function formatTimeKey(time) {
   return String(time);
 }
 
+function formatDisplayDate(time) {
+  const key = formatTimeKey(time);
+  const match = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return key;
+
+  const [, year, month, day] = match;
+  return `${year.slice(2)}年 ${Number(month)}月 ${Number(day)}日`;
+}
+
 function formatNumber(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return "--";
   }
   return Number(value).toFixed(2);
-}
-
-function formatVolume(value) {
-  const number = Number(value || 0);
-  if (number >= 1_000_000_000) return `${(number / 1_000_000_000).toFixed(1)}B`;
-  if (number >= 1_000_000) return `${(number / 1_000_000).toFixed(1)}M`;
-  if (number >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
-  return number.toLocaleString("zh-TW");
 }
 
 export default function CandlestickChart({ data = [] }) {
@@ -84,7 +85,6 @@ export default function CandlestickChart({ data = [] }) {
         CandlestickSeries,
         ColorType,
         CrosshairMode,
-        HistogramSeries,
         LineSeries,
         createChart,
       } = await import("lightweight-charts");
@@ -120,6 +120,8 @@ export default function CandlestickChart({ data = [] }) {
           borderColor: "#334155",
           timeVisible: false,
           secondsVisible: false,
+          barSpacing: 4.6,
+          minBarSpacing: 2.4,
         },
       });
 
@@ -155,33 +157,6 @@ export default function CandlestickChart({ data = [] }) {
           lineSeries.setData(lineData);
         }
       });
-
-      const volumeData = candleData
-        .filter((point) => point.volume > 0)
-        .map((point) => ({
-          time: point.time,
-          value: point.volume,
-          color:
-            point.close >= point.open
-              ? "rgba(34, 197, 94, 0.28)"
-              : "rgba(239, 68, 68, 0.28)",
-        }));
-
-      if (volumeData.length > 0) {
-        const volumeSeries = chart.addSeries(HistogramSeries, {
-          priceFormat: { type: "volume" },
-          priceScaleId: "",
-          lastValueVisible: false,
-          priceLineVisible: false,
-        });
-        volumeSeries.priceScale().applyOptions({
-          scaleMargins: {
-            top: 0.82,
-            bottom: 0,
-          },
-        });
-        volumeSeries.setData(volumeData);
-      }
 
       chart.subscribeCrosshairMove((param) => {
         const key = formatTimeKey(param.time);
@@ -223,12 +198,13 @@ export default function CandlestickChart({ data = [] }) {
       <div ref={containerRef} className="h-full w-full" />
       {hovered && (
         <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-x-3 gap-y-1 rounded border border-slate-700 bg-slate-900/85 px-3 py-2 text-xs text-slate-300 shadow-lg">
-          <span className="text-slate-100">{formatTimeKey(hovered.time)}</span>
+          <span className="text-slate-100">
+            {formatDisplayDate(hovered.time)}
+          </span>
           <span>開 {formatNumber(hovered.open)}</span>
           <span>高 {formatNumber(hovered.high)}</span>
           <span>低 {formatNumber(hovered.low)}</span>
           <span>收 {formatNumber(hovered.close)}</span>
-          <span>量 {formatVolume(hovered.volume)}</span>
         </div>
       )}
     </div>

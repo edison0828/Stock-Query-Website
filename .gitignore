@@ -4,4 +4,5 @@
 .DS_Store
 output/.DS_Store
 output/db_backups/
+database_dumps/
 *.sql.gz
