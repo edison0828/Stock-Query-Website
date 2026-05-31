@@ -208,6 +208,18 @@ Stock-Query-Website/
 
    免費來源使用 FinMind 股票主檔、財報與股利資料，並以 TWSE / TPEx 官方最新每日行情補價格；它適合作為備援或快速補最新日資料，不等同於 FinLab 的完整歷史價格匯入。
 
+   若已有歷史股價，只想不依賴 FinLab 補齊上次同步後缺漏的上市 / 上櫃 / ETF 日線，可使用官方公開來源增量同步：
+
+   ```bash
+   npm run db:sync:public-incremental -- --scope ALL
+   ```
+
+   這支腳本會從既有 `historicalprices` 的每檔最新日期往後補，逐檔呼叫 TWSE / TPEx 月資料並 upsert 到資料庫。若要修補特定歷史區間，可指定：
+
+   ```bash
+   npm run db:sync:public-incremental -- --scope ALL --force-start-date 2026-05-01 --end-date 2026-05-31
+   ```
+
    目前 `stocksplits` 會先保留空表，因為 FinLab 目前主要提供 ETF split 資料，和現有 generic schema 並不完全對應。
 
 7. **後台同步市場資料（選用）**
@@ -217,6 +229,7 @@ Stock-Query-Website/
    - `AUTO`：有 `FINLAB_API_TOKEN` 時優先使用 FinLab，失敗或未設定 token 時改用免費來源。
    - `FINLAB`：強制使用 FinLab。
    - `FREE`：強制使用 FinMind + TWSE + TPEx 免費來源。
+   - `PUBLIC_INCREMENTAL`：強制使用 TWSE + TPEx 官方公開來源，依資料庫既有日期增量補齊股價。
 
    完整同步可能需要較久時間，部署環境需具備 `DATABASE_URL`、`uv` 與對應資料來源 token。
 
@@ -255,6 +268,7 @@ Stock-Query-Website/
 | `npm run db:seed:finlab -- --scope ETF` | 使用 FinLab 只匯入 ETF |
 | `npm run db:seed:finlab -- --scope ALL` | 使用 FinLab 匯入全部可用範圍，包含 ETF |
 | `npm run db:seed:free` | 使用 FinMind + TWSE + TPEx 免費來源匯入市場資料 |
+| `npm run db:sync:public-incremental -- --scope ALL` | 使用 TWSE + TPEx 官方公開來源增量補齊既有標的股價 |
 | `npm run build` | 建置生產版本                             |
 | `npm run start` | 以生產模式啟動伺服器                     |
 

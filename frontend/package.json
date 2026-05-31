@@ -11,7 +11,8 @@
     "db:push": "prisma db push && prisma generate",
     "db:seed:finlab": "uv run --python 3.12 --with 'finlab>=1.5.9' --with pymysql python scripts/rebuild_finlab_market_data.py",
     "db:sync:etf": "uv run --python 3.12 --with 'finlab>=1.5.9' --with pymysql python scripts/sync_etf_advanced_data.py",
-    "db:seed:free": "uv run --python 3.12 --with pymysql python scripts/rebuild_free_market_data.py"
+    "db:seed:free": "uv run --python 3.12 --with pymysql python scripts/rebuild_free_market_data.py",
+    "db:sync:public-incremental": "uv run --python 3.12 --with pymysql python scripts/sync_public_incremental_prices.py"
   },
   "dependencies": {
     "@prisma/client": "^6.8.2",

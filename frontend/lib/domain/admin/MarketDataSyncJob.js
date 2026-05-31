@@ -5,6 +5,7 @@ const SOURCE_MODES = {
   AUTO: "AUTO",
   FINLAB: "FINLAB",
   FREE: "FREE",
+  PUBLIC_INCREMENTAL: "PUBLIC_INCREMENTAL",
 };
 
 const SUMMARY_PREFIX = "[summary] ";
@@ -57,13 +58,19 @@ export class MarketDataSyncJob {
 
   buildArgsForSource({ scope = "TSE_OTC", sections = {}, source }) {
     const scriptName =
-      source === SOURCE_MODES.FINLAB ? "db:seed:finlab" : "db:seed:free";
+      source === SOURCE_MODES.FINLAB
+        ? "db:seed:finlab"
+        : source === SOURCE_MODES.PUBLIC_INCREMENTAL
+          ? "db:sync:public-incremental"
+          : "db:seed:free";
     const args = ["run", scriptName, "--", "--scope", scope];
 
-    if (sections.skipStocks) args.push("--skip-stocks");
-    if (sections.skipPrices) args.push("--skip-prices");
-    if (sections.skipFinancials) args.push("--skip-financials");
-    if (sections.skipDividends) args.push("--skip-dividends");
+    if (source !== SOURCE_MODES.PUBLIC_INCREMENTAL) {
+      if (sections.skipStocks) args.push("--skip-stocks");
+      if (sections.skipPrices) args.push("--skip-prices");
+      if (sections.skipFinancials) args.push("--skip-financials");
+      if (sections.skipDividends) args.push("--skip-dividends");
+    }
 
     return args;
   }

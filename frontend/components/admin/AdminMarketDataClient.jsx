@@ -446,6 +446,7 @@ export default function AdminMarketDataClient() {
                   <SelectItem value="AUTO">Auto：FinLab 優先，免費來源備援</SelectItem>
                   <SelectItem value="FINLAB">FinLab</SelectItem>
                   <SelectItem value="FREE">免費來源：FinMind + TWSE + TPEx</SelectItem>
+                  <SelectItem value="PUBLIC_INCREMENTAL">官方公開來源：增量補股價</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -492,7 +493,8 @@ export default function AdminMarketDataClient() {
                 <p>
                   完整同步可能需要較久時間，且需要伺服器環境具備
                   `DATABASE_URL` 與 `uv`。Auto 模式有 `FINLAB_API_TOKEN`
-                  會使用 FinLab，否則使用免費來源。
+                  會使用 FinLab，否則使用免費來源；官方公開來源模式會依
+                  DB 既有日期逐檔補齊缺漏股價。
                 </p>
               </div>
             </div>

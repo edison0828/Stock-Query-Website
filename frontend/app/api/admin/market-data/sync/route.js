@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const maxDuration = 1200;
 
 const ALLOWED_SCOPES = new Set(["TSE_OTC", "ETF", "ALL"]);
-const ALLOWED_SOURCES = new Set(["AUTO", "FINLAB", "FREE"]);
+const ALLOWED_SOURCES = new Set(["AUTO", "FINLAB", "FREE", "PUBLIC_INCREMENTAL"]);
 
 function errorResponse(error) {
   return NextResponse.json(
