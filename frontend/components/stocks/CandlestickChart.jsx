@@ -2,13 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  TechnicalChartDataBuilder,
+  toChartNumber,
+} from "@/lib/domain/stocks/TechnicalChartDataBuilder";
 
 const INDICATORS = ["RSI", "KD", "MACD", "VOL"];
-const KD_PERIOD = 9;
-const RSI_PERIOD = 14;
-const MACD_FAST = 12;
-const MACD_SLOW = 26;
-const MACD_SIGNAL = 9;
 
 const COLORS = {
   background: "#0f172a",
@@ -29,22 +28,6 @@ const COLORS = {
   d: "#f59e0b",
 };
 
-function toNumber(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-function round(value, digits = 2) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return null;
-  return Number(value.toFixed(digits));
-}
-
-function average(values) {
-  if (values.length === 0) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
 function formatTimeKey(time) {
   if (!time) return "";
   if (typeof time === "string") return time;
@@ -57,7 +40,7 @@ function formatTimeKey(time) {
 }
 
 function formatNumber(value, digits = 2) {
-  const number = toNumber(value);
+  const number = toChartNumber(value);
   if (number === null) return "--";
   return number.toLocaleString("zh-TW", {
     maximumFractionDigits: digits,
@@ -66,7 +49,7 @@ function formatNumber(value, digits = 2) {
 }
 
 function formatLargeNumber(value) {
-  const number = toNumber(value);
+  const number = toChartNumber(value);
   if (number === null) return "--";
   if (Math.abs(number) >= 1_000_000_000) return `${(number / 1_000_000_000).toFixed(2)}B`;
   if (Math.abs(number) >= 1_000_000) return `${(number / 1_000_000).toFixed(2)}M`;
@@ -83,150 +66,6 @@ function barColor(point) {
     return point.close >= point.previousClose ? COLORS.up : COLORS.down;
   }
   return COLORS.muted;
-}
-
-function buildChartData(visibleData, fullData, isEtf) {
-  const visibleTimes = new Set(visibleData.map((point) => point.time));
-  const windows = { 5: [], 20: [], 60: [] };
-  const kdWindow = [];
-  const rsiGains = [];
-  const rsiLosses = [];
-  let previousClose = null;
-  let previousK = 50;
-  let previousD = 50;
-  let avgGain = null;
-  let avgLoss = null;
-  let emaFast = null;
-  let emaSlow = null;
-  let macdSignal = null;
-  const computedByTime = new Map();
-
-  fullData.forEach((point) => {
-    if (!point.time) return;
-
-    const open = toNumber(point.open);
-    const high = toNumber(point.high);
-    const low = toNumber(point.low);
-    const close = toNumber(point.close ?? point.price);
-    const volume = toNumber(point.volume);
-    const chartPrice = toNumber(
-      isEtf ? point.price_index ?? point.price ?? point.close : point.price ?? point.close
-    );
-    const overlaySource = chartPrice ?? close;
-
-    if (overlaySource !== null) {
-      Object.entries(windows).forEach(([windowSize, values]) => {
-        values.push(overlaySource);
-        if (values.length > Number(windowSize)) values.shift();
-      });
-    }
-
-    const ma5 = windows[5].length === 5 ? average(windows[5]) : null;
-    const ma20 = windows[20].length === 20 ? average(windows[20]) : null;
-    const ma60 = windows[60].length === 60 ? average(windows[60]) : null;
-    const stdDev =
-      windows[20].length === 20 && ma20 !== null
-        ? Math.sqrt(average(windows[20].map((value) => (value - ma20) ** 2)))
-        : null;
-
-    const nextPoint = {
-      ...point,
-      open,
-      high,
-      low,
-      close,
-      volume,
-      chartPrice,
-      previousClose,
-      lineMa5: toNumber(point.ma5) ?? ma5,
-      lineMa20: toNumber(point.ma20) ?? ma20,
-      lineMa60: toNumber(point.ma60) ?? ma60,
-      bollingerUpper:
-        toNumber(point.bollinger_upper) ??
-        (ma20 !== null && stdDev !== null ? ma20 + stdDev * 2 : null),
-      bollingerMiddle: toNumber(point.bollinger_middle) ?? ma20,
-      bollingerLower:
-        toNumber(point.bollinger_lower) ??
-        (ma20 !== null && stdDev !== null ? ma20 - stdDev * 2 : null),
-      rsi14: toNumber(point.rsi14),
-      macd: toNumber(point.macd),
-      macd_signal: toNumber(point.macd_signal),
-      macd_histogram: toNumber(point.macd_histogram),
-      volume_ma20: toNumber(point.volume_ma20),
-      k: null,
-      d: null,
-    };
-
-    if (previousClose !== null && close !== null) {
-      const change = close - previousClose;
-      const gain = Math.max(change, 0);
-      const loss = Math.max(-change, 0);
-      rsiGains.push(gain);
-      rsiLosses.push(loss);
-      if (rsiGains.length > RSI_PERIOD) rsiGains.shift();
-      if (rsiLosses.length > RSI_PERIOD) rsiLosses.shift();
-
-      if (rsiGains.length === RSI_PERIOD && rsiLosses.length === RSI_PERIOD) {
-        if (avgGain === null || avgLoss === null) {
-          avgGain = average(rsiGains);
-          avgLoss = average(rsiLosses);
-        } else {
-          avgGain = (avgGain * (RSI_PERIOD - 1) + gain) / RSI_PERIOD;
-          avgLoss = (avgLoss * (RSI_PERIOD - 1) + loss) / RSI_PERIOD;
-        }
-        nextPoint.rsi14 =
-          nextPoint.rsi14 ??
-          (avgLoss === 0 ? 100 : round(100 - 100 / (1 + avgGain / avgLoss)));
-      }
-    }
-
-    if (high !== null && low !== null && close !== null) {
-      kdWindow.push({ high, low, close });
-      if (kdWindow.length > KD_PERIOD) kdWindow.shift();
-      if (kdWindow.length === KD_PERIOD) {
-        const highestHigh = Math.max(...kdWindow.map((item) => item.high));
-        const lowestLow = Math.min(...kdWindow.map((item) => item.low));
-        const rsv =
-          highestHigh === lowestLow
-            ? 50
-            : ((close - lowestLow) / (highestHigh - lowestLow)) * 100;
-        previousK = (previousK * 2 + rsv) / 3;
-        previousD = (previousD * 2 + previousK) / 3;
-        nextPoint.k = round(previousK);
-        nextPoint.d = round(previousD);
-      }
-    } else {
-      kdWindow.length = 0;
-    }
-
-    if (close !== null) {
-      const fastMultiplier = 2 / (MACD_FAST + 1);
-      const slowMultiplier = 2 / (MACD_SLOW + 1);
-      const signalMultiplier = 2 / (MACD_SIGNAL + 1);
-      emaFast =
-        emaFast === null ? close : close * fastMultiplier + emaFast * (1 - fastMultiplier);
-      emaSlow =
-        emaSlow === null ? close : close * slowMultiplier + emaSlow * (1 - slowMultiplier);
-      const fallbackMacd = emaFast - emaSlow;
-      macdSignal =
-        macdSignal === null
-          ? fallbackMacd
-          : fallbackMacd * signalMultiplier + macdSignal * (1 - signalMultiplier);
-
-      nextPoint.macd = nextPoint.macd ?? round(fallbackMacd);
-      nextPoint.macd_signal = nextPoint.macd_signal ?? round(macdSignal);
-      nextPoint.macd_histogram =
-        nextPoint.macd_histogram ?? round(fallbackMacd - macdSignal);
-    }
-
-    computedByTime.set(point.time, nextPoint);
-    previousClose = close ?? previousClose;
-  });
-
-  return fullData
-    .filter((point) => visibleTimes.has(point.time))
-    .map((point) => computedByTime.get(point.time))
-    .filter(Boolean);
 }
 
 function lineData(data, key) {
@@ -284,7 +123,12 @@ export default function CandlestickChart({
   const [renderError, setRenderError] = useState(null);
 
   const chartData = useMemo(
-    () => buildChartData(data, fullData, isEtf),
+    () =>
+      TechnicalChartDataBuilder.build({
+        visibleData: data,
+        fullData,
+        isEtf,
+      }),
     [data, fullData, isEtf]
   );
 
