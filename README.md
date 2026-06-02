@@ -214,7 +214,15 @@ Stock-Query-Website/
    npm run db:sync:public-incremental -- --scope ALL
    ```
 
-   這支腳本會從既有 `historicalprices` 的每檔最新日期往後補，逐檔呼叫 TWSE / TPEx 月資料並 upsert 到資料庫。若要修補特定歷史區間，可指定：
+   這支腳本會從既有 `historicalprices` 的每檔最新日期往後補，逐檔呼叫 TWSE / TPEx 月資料並 upsert 到資料庫。它會即時輸出進度、對官方端暫時節流自動退避重試，並在 `frontend/tmp/public_incremental_checkpoints/` 建立 checkpoint，讓中斷後同參數重跑可跳過已完成標的。
+
+   若只要補最新一天，建議保留預設節流或使用小幅節流，不要把 request 間隔降到 0：
+
+   ```bash
+   npm run db:sync:public-incremental -- --scope ALL --request-sleep 0.2
+   ```
+
+   若要修補特定歷史區間，可指定：
 
    ```bash
    npm run db:sync:public-incremental -- --scope ALL --force-start-date 2026-05-01 --end-date 2026-05-31

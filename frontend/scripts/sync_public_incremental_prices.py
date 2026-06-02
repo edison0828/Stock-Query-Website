@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, unquote, urlparse
 from urllib.request import Request, urlopen
@@ -24,6 +25,11 @@ TPEX_TRADING_STOCK_URL = "https://www.tpex.org.tw/www/zh-tw/afterTrading/trading
 
 MARKET_TWSE = "上市"
 MARKET_TPEX = "上櫃"
+CHECKPOINT_DIR = ROOT / "tmp" / "public_incremental_checkpoints"
+
+
+def log(message: str) -> None:
+    print(message, flush=True)
 
 
 def parse_args() -> argparse.Namespace:
@@ -85,14 +91,33 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--request-sleep",
         type=float,
-        default=0.35,
+        default=0.2,
         help="Seconds to sleep between public endpoint requests.",
+    )
+    parser.add_argument(
+        "--backoff-base",
+        type=float,
+        default=2.0,
+        help="Base seconds for exponential backoff after transient public endpoint errors.",
     )
     parser.add_argument(
         "--retries",
         type=int,
-        default=2,
+        default=4,
         help="Number of retries per public endpoint request.",
+    )
+    parser.add_argument(
+        "--checkpoint-file",
+        default=None,
+        help=(
+            "JSONL checkpoint path. Defaults to tmp/public_incremental_checkpoints/"
+            "<run-key>.jsonl. Use an empty string to disable checkpointing."
+        ),
+    )
+    parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="Ignore and overwrite an existing checkpoint for this run.",
     )
     parser.add_argument(
         "--limit",
@@ -161,7 +186,7 @@ def ensure_schema_exists(connection: pymysql.connections.Connection) -> None:
         )
 
 
-def fetch_json(url: str, params: dict, retries: int) -> dict:
+def fetch_json(url: str, params: dict, retries: int, backoff_base: float) -> dict:
     request_url = f"{url}?{urlencode(params)}"
     headers = {
         "Accept": "application/json,text/plain,*/*",
@@ -178,7 +203,15 @@ def fetch_json(url: str, params: dict, retries: int) -> dict:
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as error:
             last_error = error
             if attempt < retries:
-                time.sleep(1.5 * (attempt + 1))
+                wait_seconds = backoff_base * (2**attempt)
+                status = getattr(error, "code", None)
+                if status in {308, 429}:
+                    wait_seconds *= 2
+                log(
+                    f"[public-incremental] retry {attempt + 1}/{retries} "
+                    f"after {wait_seconds:.1f}s: {request_url} error={error}"
+                )
+                time.sleep(wait_seconds)
 
     raise RuntimeError(f"Failed to fetch {request_url}: {last_error}")
 
@@ -266,10 +299,81 @@ def load_symbols(
         ]
 
 
+class Checkpoint:
+    def __init__(self, path: Optional[Path], restart: bool = False) -> None:
+        self.path = path
+        self.completed: Set[str] = set()
+        self.failed: Set[str] = set()
+
+        if not path:
+            return
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if restart and path.exists():
+            path.unlink()
+        if not path.exists():
+            return
+
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                record = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+            stock_id = str(record.get("stock_id") or "")
+            if not stock_id:
+                continue
+            status = record.get("status")
+            if status == "completed":
+                self.completed.add(stock_id)
+                self.failed.discard(stock_id)
+            elif status == "failed":
+                self.failed.add(stock_id)
+
+    def record(self, payload: dict) -> None:
+        stock_id = str(payload.get("stock_id") or "")
+        status = payload.get("status")
+        if stock_id and status == "completed":
+            self.completed.add(stock_id)
+            self.failed.discard(stock_id)
+        elif stock_id and status == "failed":
+            self.failed.add(stock_id)
+
+        if not self.path:
+            return
+
+        with self.path.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def build_run_key(args: argparse.Namespace, end_date: date) -> str:
+    payload = {
+        "scope": args.scope,
+        "stock_id": sorted(args.stock_id),
+        "start_date": args.start_date,
+        "force_start_date": args.force_start_date,
+        "end_date": end_date.isoformat(),
+        "bootstrap_start_date": args.bootstrap_start_date,
+        "limit": args.limit,
+    }
+    digest = hashlib.sha1(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:12]
+    return f"{args.scope.lower()}_{end_date.isoformat()}_{digest}"
+
+
+def resolve_checkpoint_path(args: argparse.Namespace, run_key: str) -> Optional[Path]:
+    if args.checkpoint_file == "":
+        return None
+    if args.checkpoint_file:
+        return Path(args.checkpoint_file)
+    return CHECKPOINT_DIR / f"{run_key}.jsonl"
+
+
 def fetch_twse_month(
     stock_id: str,
     month_start: date,
     retries: int,
+    backoff_base: float,
 ) -> List[Tuple[str, date, object, object, object, object, object, object, object]]:
     payload = fetch_json(
         TWSE_STOCK_DAY_URL,
@@ -279,6 +383,7 @@ def fetch_twse_month(
             "response": "json",
         },
         retries,
+        backoff_base,
     )
     if payload.get("stat") != "OK":
         return []
@@ -307,6 +412,7 @@ def fetch_tpex_month(
     stock_id: str,
     month_start: date,
     retries: int,
+    backoff_base: float,
 ) -> List[Tuple[str, date, object, object, object, object, object, object, object]]:
     payload = fetch_json(
         TPEX_TRADING_STOCK_URL,
@@ -316,6 +422,7 @@ def fetch_tpex_month(
             "response": "json",
         },
         retries,
+        backoff_base,
     )
     tables = payload.get("tables") or []
     if not tables:
@@ -346,45 +453,55 @@ def fetch_public_month(
     market_type: str,
     month_start: date,
     retries: int,
+    backoff_base: float,
 ) -> List[Tuple[str, date, object, object, object, object, object, object, object]]:
     if market_type == MARKET_TPEX:
-        return fetch_tpex_month(stock_id, month_start, retries)
-    return fetch_twse_month(stock_id, month_start, retries)
+        return fetch_tpex_month(stock_id, month_start, retries, backoff_base)
+    return fetch_twse_month(stock_id, month_start, retries, backoff_base)
 
 
 def execute_batches(
     connection: pymysql.connections.Connection,
     sql: str,
-    rows: Iterable[Tuple],
+    symbol_results: Iterable[dict],
     batch_size: int,
     label: str,
     dry_run: bool,
+    checkpoint: Checkpoint,
 ) -> int:
     total = 0
     batch: List[Tuple] = []
+    pending_records: List[dict] = []
+
+    def flush_batch(cursor) -> None:
+        nonlocal total, batch, pending_records
+        if not batch and not pending_records:
+            return
+        if batch and not dry_run:
+            cursor.executemany(sql, batch)
+            connection.commit()
+        total += len(batch)
+        if not dry_run:
+            for record in pending_records:
+                checkpoint.record(record)
+        log(f"[{label}] {'planned' if dry_run else 'committed'} {total}")
+        batch = []
+        pending_records = []
 
     with connection.cursor() as cursor:
-        for row in rows:
-            batch.append(row)
+        for result in symbol_results:
+            rows = result.get("rows") or []
+            batch.extend(rows)
+            pending_records.append(result["checkpoint"])
             if len(batch) >= batch_size:
-                if not dry_run:
-                    cursor.executemany(sql, batch)
-                    connection.commit()
-                total += len(batch)
-                print(f"[{label}] {'planned' if dry_run else 'committed'} {total}")
-                batch.clear()
+                flush_batch(cursor)
 
-        if batch:
-            if not dry_run:
-                cursor.executemany(sql, batch)
-                connection.commit()
-            total += len(batch)
-            print(f"[{label}] {'planned' if dry_run else 'committed'} {total}")
+        flush_batch(cursor)
 
     return total
 
 
-def iter_incremental_rows(
+def iter_incremental_results(
     symbols: Sequence[Tuple[str, str, str, Optional[date]]],
     start_bound: Optional[date],
     force_start_date: Optional[date],
@@ -392,10 +509,16 @@ def iter_incremental_rows(
     bootstrap_start_date: Optional[date],
     request_sleep: float,
     retries: int,
-) -> Iterator[Tuple[str, date, object, object, object, object, object, object, object]]:
+    backoff_base: float,
+    checkpoint: Checkpoint,
+) -> Iterator[dict]:
     for index, (stock_id, market_type, _asset_type, latest_date) in enumerate(
         symbols, start=1
     ):
+        if stock_id in checkpoint.completed:
+            log(f"[public-incremental] {index}/{len(symbols)} {stock_id} checkpoint-skip")
+            continue
+
         if force_start_date:
             start_date = force_start_date
         elif latest_date:
@@ -403,40 +526,87 @@ def iter_incremental_rows(
         elif bootstrap_start_date:
             start_date = bootstrap_start_date
         else:
-            print(f"[public-incremental] {index}/{len(symbols)} {stock_id} skipped: no existing price rows")
+            log(f"[public-incremental] {index}/{len(symbols)} {stock_id} skipped: no existing price rows")
+            yield {
+                "rows": [],
+                "checkpoint": {
+                    "stock_id": stock_id,
+                    "status": "completed",
+                    "reason": "no_existing_price_rows",
+                    "rows": 0,
+                    "finished_at": datetime.now().isoformat(timespec="seconds"),
+                },
+            }
             continue
 
         if start_bound and start_date < start_bound:
             start_date = start_bound
 
         if start_date > end_date:
-            print(f"[public-incremental] {index}/{len(symbols)} {stock_id} up-to-date latest={latest_date}")
+            log(f"[public-incremental] {index}/{len(symbols)} {stock_id} up-to-date latest={latest_date}")
+            yield {
+                "rows": [],
+                "checkpoint": {
+                    "stock_id": stock_id,
+                    "status": "completed",
+                    "reason": "up_to_date",
+                    "rows": 0,
+                    "finished_at": datetime.now().isoformat(timespec="seconds"),
+                },
+            }
             continue
 
         fetched = 0
-        yielded = 0
+        rows_to_write: List[Tuple[str, date, object, object, object, object, object, object, object]] = []
+        failures: List[str] = []
         for month_start in month_starts(start_date, end_date):
             try:
-                month_rows = fetch_public_month(stock_id, market_type, month_start, retries)
+                month_rows = fetch_public_month(
+                    stock_id,
+                    market_type,
+                    month_start,
+                    retries,
+                    backoff_base,
+                )
             except RuntimeError as error:
-                print(f"[public-incremental] {stock_id} {month_start:%Y-%m} failed: {error}")
+                message = f"{month_start:%Y-%m}: {error}"
+                failures.append(message)
+                log(f"[public-incremental] {stock_id} {month_start:%Y-%m} failed: {error}")
                 continue
 
             fetched += len(month_rows)
             for row in month_rows:
                 trade_date = row[1]
                 if start_date <= trade_date <= end_date:
-                    yielded += 1
-                    yield row
+                    rows_to_write.append(row)
 
             if request_sleep:
                 time.sleep(request_sleep)
 
-        print(
+        if failures:
+            status = "failed"
+        elif rows_to_write:
+            status = "completed"
+        else:
+            status = "empty"
+        log(
             f"[public-incremental] {index}/{len(symbols)} {stock_id} "
             f"range={start_date.isoformat()}..{end_date.isoformat()} "
-            f"fetched={fetched} yielded={yielded}"
+            f"fetched={fetched} yielded={len(rows_to_write)}"
         )
+        yield {
+            "rows": rows_to_write,
+            "checkpoint": {
+                "stock_id": stock_id,
+                "status": status,
+                "rows": len(rows_to_write),
+                "fetched": fetched,
+                "failures": failures,
+                "started_from": start_date.isoformat(),
+                "ended_at": end_date.isoformat(),
+                "finished_at": datetime.now().isoformat(timespec="seconds"),
+            },
+        }
 
 
 def get_latest_price_date(connection: pymysql.connections.Connection) -> object:
@@ -462,9 +632,15 @@ def main() -> int:
         if not symbols:
             raise SystemExit("No symbols found in stocks table for the requested scope.")
 
-        print(
+        run_key = build_run_key(args, end_date)
+        checkpoint_path = resolve_checkpoint_path(args, run_key)
+        checkpoint = Checkpoint(checkpoint_path, restart=args.restart)
+
+        log(
             f"[public-incremental] symbols={len(symbols)} scope={args.scope} "
-            f"end_date={end_date.isoformat()} dry_run={args.dry_run}"
+            f"end_date={end_date.isoformat()} dry_run={args.dry_run} "
+            f"checkpoint={checkpoint_path or 'disabled'} "
+            f"checkpoint_completed={len(checkpoint.completed)}"
         )
 
         historical_sql = """
@@ -492,7 +668,7 @@ def main() -> int:
         historical_count = execute_batches(
             connection,
             historical_sql,
-            iter_incremental_rows(
+            iter_incremental_results(
                 symbols,
                 start_bound,
                 force_start_date,
@@ -500,13 +676,16 @@ def main() -> int:
                 bootstrap_start_date,
                 args.request_sleep,
                 args.retries,
+                args.backoff_base,
+                checkpoint,
             ),
             args.batch_size,
             "historicalprices:public-incremental",
             args.dry_run,
+            checkpoint,
         )
         latest_price_date = get_latest_price_date(connection)
-        print(
+        log(
             "[summary] "
             + json.dumps(
                 {
@@ -517,6 +696,9 @@ def main() -> int:
                     "financialreports": 0,
                     "dividends": 0,
                     "symbols": len(symbols),
+                    "checkpoint_file": str(checkpoint_path) if checkpoint_path else None,
+                    "checkpoint_completed": len(checkpoint.completed),
+                    "checkpoint_failed": len(checkpoint.failed),
                     "latest_price_date": latest_price_date.isoformat()
                     if latest_price_date
                     else None,
@@ -525,7 +707,7 @@ def main() -> int:
                 ensure_ascii=False,
             )
         )
-        print("[done] Public incremental price sync completed.")
+        log("[done] Public incremental price sync completed.")
         return 0
     finally:
         connection.close()
