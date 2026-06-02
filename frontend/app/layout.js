@@ -1,11 +1,7 @@
-// app/layout.jsx
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import AuthProvider from "./auth-provider"; // 引入 AuthProvider
 import { WatchlistProvider } from "@/contexts/WatchlistContext";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "股票查詢系統",
@@ -15,7 +11,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="zh-TW" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body>
         <AuthProvider>
           <WatchlistProvider>
             {" "}
