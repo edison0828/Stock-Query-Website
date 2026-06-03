@@ -13,7 +13,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // 引入 Avatar
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Menu, // For mobile menu trigger
   Search,
@@ -56,6 +61,7 @@ export default function Navbar({ user }) {
   const [searchResults, setSearchResults] = useState([]);
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const searchContainerRef = useRef(null); // << 新增: 用於檢測點擊外部
 
   // 點擊外部隱藏搜尋結果
@@ -167,14 +173,14 @@ export default function Navbar({ user }) {
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-700 bg-slate-800 px-4 md:px-6">
       {/* Mobile Sidebar Trigger & Logo (visible on mobile, hidden on sm+) */}
       <div className="flex items-center sm:hidden">
-        <Sheet>
+        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <SheetTrigger asChild>
             <Button
               size="icon"
               variant="outline"
-              className="border-slate-600 hover:bg-slate-700"
+              className="border-slate-500 bg-slate-700/80 text-slate-100 hover:bg-slate-600 hover:text-white"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-5 w-5 text-slate-100" />
               <span className="sr-only">Toggle Menu</span>
             </Button>
           </SheetTrigger>
@@ -182,10 +188,12 @@ export default function Navbar({ user }) {
             side="left"
             className="sm:max-w-xs bg-slate-800 border-slate-700 text-slate-300"
           >
+            <SheetTitle className="sr-only">手機版導覽選單</SheetTitle>
             {/* Mobile Sidebar Content - 可以複製 Sidebar.jsx 的主要導航部分 */}
             <nav className="grid gap-6 text-lg font-medium py-6">
               <Link
                 href="/dashboard"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="group flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-blue-600 text-lg font-semibold text-primary-foreground md:text-base"
               >
                 <TrendingUp className="h-6 w-6 transition-all group-hover:scale-110" />
@@ -193,30 +201,42 @@ export default function Navbar({ user }) {
               </Link>
               <Link
                 href="/dashboard"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="flex items-center gap-4 px-2.5 hover:text-slate-50"
               >
                 Dashboard
               </Link>
               <Link
                 href="/stocks"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="flex items-center gap-4 px-2.5 hover:text-slate-50"
               >
                 Stock Search
               </Link>
               <Link
                 href="/watchlist"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="flex items-center gap-4 px-2.5 hover:text-slate-50"
               >
                 My Watchlist
               </Link>
               <Link
+                href="/compare"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center gap-4 px-2.5 hover:text-slate-50"
+              >
+                Peer Compare
+              </Link>
+              <Link
                 href="/portfolios"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="flex items-center gap-4 px-2.5 hover:text-slate-50"
               >
                 My Portfolios
               </Link>
               <Link
                 href="/alerts"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="flex items-center gap-4 px-2.5 hover:text-slate-50"
               >
                 <Bell className="h-4 w-4" />
@@ -224,6 +244,7 @@ export default function Navbar({ user }) {
               </Link>
               <Link
                 href="/backtests"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="flex items-center gap-4 px-2.5 hover:text-slate-50"
               >
                 <LineChart className="h-4 w-4" />
@@ -231,6 +252,7 @@ export default function Navbar({ user }) {
               </Link>
               <Link
                 href="/profile"
+                onClick={() => setIsMobileMenuOpen(false)}
                 className="flex items-center gap-4 px-2.5 hover:text-slate-50"
               >
                 Profile

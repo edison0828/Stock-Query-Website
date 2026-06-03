@@ -19,11 +19,11 @@ export default async function DashboardLayout({ children }) {
       {" "}
       {/* 主背景色 */}
       <Sidebar /> {/* 左側邊欄 */}
-      <div className="flex flex-col sm:pl-64">
+      <div className="flex min-w-0 flex-col sm:pl-64">
         {" "}
         {/* sm:pl-64 根據你的 Sidebar 寬度調整 */}
         <Navbar user={session.user} /> {/* 頂部導航欄，傳遞 user 資訊 */}
-        <main className="flex-1 p-4 pt-6 md:p-6 md:pt-8 bg-slate-800/50">
+        <main className="min-w-0 flex-1 overflow-x-hidden p-4 pt-6 md:p-6 md:pt-8 bg-slate-800/50">
           {" "}
           {/* 主內容區域背景和內距 */}
           {children} {/* 這裡會渲染具體的頁面內容 */}
