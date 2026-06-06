@@ -105,11 +105,13 @@ Stock-Query-Website/
    DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DATABASE?connection_limit=5"
    FINLAB_API_TOKEN=你的 FinLab VIP / API Token
    FINMIND_API_TOKEN=可選，免費來源若需較高額度可設定
+   CRON_SECRET=請改成隨機長字串
    ```
 
    - 若未啟用 Google OAuth，可先留空 `GOOGLE_CLIENT_*`，但登入功能將僅限 Email/密碼。
    - `DATABASE_URL` 請替換為實際 MySQL 連線字串。
    - `FINLAB_API_TOKEN` 是完整匯入歷史股價與財報的主要資料來源；若缺少 token，管理員同步的 Auto 模式會改用免費來源。
+   - `CRON_SECRET` 用於保護排程 API，建議使用 `openssl rand -hex 24` 產生。
 
 4. **初始化資料庫結構（沒有備份時使用）**
 
@@ -241,7 +243,26 @@ Stock-Query-Website/
 
    完整同步可能需要較久時間，部署環境需具備 `DATABASE_URL`、`uv` 與對應資料來源 token。
 
-8. **啟動開發伺服器**
+8. **自動評估警示通知（選用）**
+
+   專案提供排程專用 API，可在不需要使用者手動按按鈕的情況下，評估所有啟用中的警示規則並寫入站內通知：
+
+   ```text
+   GET 或 POST /api/notifications/evaluate-cron
+   Authorization: Bearer <CRON_SECRET>
+   ```
+
+   本機測試可使用：
+
+   ```bash
+   curl -X POST \
+     -H "Authorization: Bearer $CRON_SECRET" \
+     http://localhost:3000/api/notifications/evaluate-cron
+   ```
+
+   若部署在 Vercel，`frontend/vercel.json` 已設定每天 `08:00 UTC` 執行一次，也就是台灣時間 16:00。請在 Vercel Project Settings 的 Environment Variables 設定同一組 `CRON_SECRET`；Vercel Cron 會在排程呼叫時自動帶入 Bearer token。若使用其他平台，也可以用 GitHub Actions、Linux crontab 或第三方 cron 服務定時呼叫同一個 API。
+
+9. **啟動開發伺服器**
 
    ```bash
    npm run dev
@@ -249,7 +270,7 @@ Stock-Query-Website/
 
    瀏覽器開啟 [http://localhost:3000](http://localhost:3000) 即可開始使用。修改 `app/page.jsx` 或其他檔案會自動觸發 HMR 更新。
 
-9. **建置與部署（選用）**
+10. **建置與部署（選用）**
    ```bash
    npm run build   # 建置生產版
    npm run start   # 啟動生產伺服器（需事先執行 build）
