@@ -24,6 +24,7 @@ import {
   Search,
   TrendingUp, // Logo Icon
   Bell,
+  DatabaseZap,
   LineChart,
   LogOut, // Logout Icon
   Settings, // Settings Icon
@@ -54,6 +55,7 @@ export default function Navbar({ user }) {
   // const { data: session } = useSession(); // 如果需要更完整的 session
   // const currentUser = user || session?.user; // 優先使用 prop 傳入的 user
   const currentUser = user; // 直接使用從 layout 傳入的 user
+  const isAdmin = currentUser?.role === "admin";
 
   const { toast } = useToast(); // << 新增
 
@@ -250,6 +252,16 @@ export default function Navbar({ user }) {
                 <LineChart className="h-4 w-4" />
                 Backtests
               </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin/market-data"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center gap-4 px-2.5 hover:text-slate-50"
+                >
+                  <DatabaseZap className="h-4 w-4" />
+                  Market Data Admin
+                </Link>
+              )}
               <Link
                 href="/profile"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -354,6 +366,17 @@ export default function Navbar({ user }) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-slate-700" />
+            {isAdmin && (
+              <DropdownMenuItem
+                asChild
+                className="hover:bg-slate-700/80 cursor-pointer"
+              >
+                <Link href="/admin/market-data" className="flex items-center">
+                  <DatabaseZap className="mr-2 h-4 w-4" />
+                  <span>市場資料維護</span>
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               asChild
               className="hover:bg-slate-700/80 cursor-pointer"
