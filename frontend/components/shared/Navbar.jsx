@@ -27,7 +27,6 @@ import {
   DatabaseZap,
   LineChart,
   LogOut, // Logout Icon
-  Settings, // Settings Icon
   User, // Profile Icon
   Loader2 as Spinner, // Loading Spinner
 } from "lucide-react";
@@ -384,17 +383,6 @@ export default function Navbar({ user }) {
               <Link href="/profile" className="flex items-center">
                 <User className="mr-2 h-4 w-4" />
                 <span>個人資料</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              asChild
-              className="hover:bg-slate-700/80 cursor-pointer"
-            >
-              <Link href="/settings" className="flex items-center">
-                {" "}
-                {/* 假設有設定頁 */}
-                <Settings className="mr-2 h-4 w-4" />
-                <span>設定</span>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-slate-700" />
