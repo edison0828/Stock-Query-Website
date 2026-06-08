@@ -55,6 +55,17 @@ const MiniTrendChart = ({ data, isUp }) => (
   </ResponsiveContainer>
 );
 
+function getDeterministicJitter(seed, index) {
+  const input = `${seed || "trend"}:${index}`;
+  let hash = 0;
+
+  for (let charIndex = 0; charIndex < input.length; charIndex += 1) {
+    hash = (hash * 31 + input.charCodeAt(charIndex)) % 100000;
+  }
+
+  return hash / 100000;
+}
+
 export default function DashboardPage() {
   // 新增狀態管理
   const [watchlistSummary, setWatchlistSummary] = useState([]);
@@ -106,7 +117,7 @@ export default function DashboardPage() {
         trendData:
           item.trend_data && item.trend_data.length >= 2
             ? item.trend_data
-            : generateTrendData(item.is_up),
+            : generateTrendData(item.is_up, item.symbol),
       }));
 
       setWatchlistSummary(formattedData);
@@ -141,7 +152,7 @@ export default function DashboardPage() {
   };
 
   // 根據漲跌生成趨勢數據
-  const generateTrendData = (isUp) => {
+  const generateTrendData = (isUp, seed) => {
     const baseValue = 15;
     const variation = 5;
     const trend = isUp ? 1 : -1;
@@ -150,7 +161,7 @@ export default function DashboardPage() {
       uv:
         baseValue +
         index * trend * 2 +
-        (Math.random() * variation - variation / 2),
+        (getDeterministicJitter(seed, index) * variation - variation / 2),
     }));
   };
 
