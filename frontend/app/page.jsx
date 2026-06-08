@@ -24,14 +24,19 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [hasMounted, setHasMounted] = useState(false);
   const router = useRouter();
   const { data: session, status } = useSession();
 
   useEffect(() => {
-    if (status === "authenticated") {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (hasMounted && status === "authenticated") {
       router.replace("/dashboard");
     }
-  }, [router, status]);
+  }, [hasMounted, router, status]);
 
   const handleCredentialsLogin = async (e) => {
     e.preventDefault();
@@ -70,7 +75,7 @@ export default function LoginPage() {
     await signIn("google", { callbackUrl: "/dashboard" });
   };
 
-  if (status === "loading" || status === "authenticated") {
+  if (!hasMounted || status === "loading" || status === "authenticated") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         載入中...
