@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+import time
 import warnings
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Sequence, Tuple
@@ -59,6 +60,7 @@ OTC_DIVIDEND_DATASETS = {
 }
 
 QUARTER_PATTERN = re.compile(r"^(?P<year>\d{4})-Q(?P<quarter>[1-4])$")
+FINLAB_GET_RETRIES = 5
 
 
 def parse_args() -> argparse.Namespace:
@@ -157,6 +159,26 @@ def login_finlab(api_token: str) -> None:
     finlab.login(api_token)
 
 
+def get_finlab_dataset(dataset: str) -> pd.DataFrame:
+    last_error: Exception | None = None
+
+    for attempt in range(1, FINLAB_GET_RETRIES + 1):
+        try:
+            return data.get(dataset)
+        except Exception as error:
+            last_error = error
+            if attempt >= FINLAB_GET_RETRIES:
+                break
+            wait_seconds = min(60, 5 * attempt)
+            print(
+                f"[finlab] retrying {dataset} after error "
+                f"({attempt}/{FINLAB_GET_RETRIES}): {error}"
+            )
+            time.sleep(wait_seconds)
+
+    raise last_error or RuntimeError(f"Failed to load FinLab dataset: {dataset}")
+
+
 def load_company_data() -> Dict[str, dict]:
     if not COMPANY_JSON_FILE.exists():
         return {}
@@ -177,7 +199,7 @@ def load_existing_company_names(
 
 def get_universe_ids(market: str) -> List[str]:
     with data.universe(market=market):
-        close = data.get("price:收盤價")
+        close = get_finlab_dataset("price:收盤價")
     return list(close.columns)
 
 
@@ -190,7 +212,7 @@ def get_market_id_sets() -> Dict[str, set[str]]:
 
 
 def get_finlab_categories() -> Dict[str, str]:
-    categories = data.get("security_categories").reset_index(drop=True)
+    categories = get_finlab_dataset("security_categories").reset_index(drop=True)
     if "stock_id" not in categories.columns or "category" not in categories.columns:
         return {}
 
@@ -260,7 +282,7 @@ def get_price_frames(scope: str) -> Dict[str, pd.DataFrame]:
     with data.universe(market=scope):
         for column, dataset in PRICE_DATASETS.items():
             print(f"[finlab] loading {dataset}")
-            frames[column] = data.get(dataset)
+            frames[column] = get_finlab_dataset(dataset)
     return frames
 
 
@@ -297,7 +319,7 @@ def get_financial_frames() -> Dict[str, pd.DataFrame]:
     frames: Dict[str, pd.DataFrame] = {}
     for column, dataset in FINANCIAL_DATASETS.items():
         print(f"[finlab] loading {dataset}")
-        frames[column] = data.get(dataset)
+        frames[column] = get_finlab_dataset(dataset)
     return frames
 
 
@@ -338,7 +360,7 @@ def build_dividend_rows(
 
     for column, dataset in datasets.items():
         print(f"[finlab] loading {dataset}")
-        frame = data.get(dataset)
+        frame = get_finlab_dataset(dataset)
         columns = [stock_id for stock_id in allowed_stock_ids if stock_id in frame.columns]
         if not columns:
             continue
