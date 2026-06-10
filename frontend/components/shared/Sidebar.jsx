@@ -13,6 +13,7 @@ import {
   DatabaseZap,
   LineChart,
   UserCircle,
+  Users,
   HelpCircle,
   TrendingUp,
   ChevronUp,
@@ -56,6 +57,7 @@ export default function Sidebar() {
 
   const supportItems = [{ href: "/help", label: "Help/FAQ", icon: HelpCircle }];
   const adminItems = [
+    { href: "/admin/users", label: "User Account Admin", icon: Users },
     { href: "/admin/market-data", label: "Market Data Admin", icon: DatabaseZap },
   ];
   const isAdmin = session?.user?.role === "admin";

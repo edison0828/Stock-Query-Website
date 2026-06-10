@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useEffect } from "react"; // 確保 useEffect 被引入
 import { signIn, useSession } from "next-auth/react";
-import { useRouter, redirect, useSearchParams } from "next/navigation"; // redirect 和 useSearchParams 也引入
+import { useRouter } from "next/navigation";
 import { Mail, Lock, TrendingUp, Chrome } from "lucide-react";
 import { useToast } from "@/hooks/use-toast"; // 假設路徑正確
 
@@ -27,9 +27,9 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState(null); // 用於表單提交時的錯誤
+  const [hasMounted, setHasMounted] = useState(false);
 
   const router = useRouter();
-  // const searchParams = useSearchParams();
   const { data: session, status } = useSession(); // status: "loading", "authenticated", "unauthenticated"
   const { toast } = useToast();
 
@@ -54,12 +54,15 @@ export default function LoginPage() {
   // }, [searchParams, formError, toast]); // 依賴項
 
   useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
     // 處理已認證用戶的跳轉
-    if (status === "authenticated") {
-      // 這裡使用 redirect 而不是 router.push, 因為 redirect 設計用於中止當前渲染流程
-      redirect("/dashboard");
+    if (hasMounted && status === "authenticated") {
+      router.replace("/dashboard");
     }
-  }, [status]); // 只依賴 status
+  }, [hasMounted, router, status]); // 只依賴 status
 
   // --- 3. 事件處理函數 ---
   const handleCredentialsLogin = async (e) => {
@@ -128,7 +131,7 @@ export default function LoginPage() {
 
   // --- 4. 條件渲染 (用於加載狀態) ---
   // 這個判斷放在所有 Hooks 調用之後
-  if (status === "loading") {
+  if (!hasMounted || status === "loading" || status === "authenticated") {
     // 只檢查 useSession 的 loading 狀態
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">

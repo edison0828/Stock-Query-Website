@@ -302,9 +302,9 @@ function StockDetailPageContent() {
       {/* 股票基本資訊 */}
       <Card className="bg-slate-800 border-slate-700 text-slate-200 overflow-hidden">
         <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-slate-50">
+          <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <h1 className="break-words text-3xl font-bold text-slate-50 md:text-4xl">
                 {stockData.symbol} - {stockData.companyName}
               </h1>
               <p className="text-sm text-slate-400 mt-1">
@@ -312,15 +312,16 @@ function StockDetailPageContent() {
                 {isEtf ? " / ETF" : ""}
               </p>
             </div>
-            <div className="flex items-center gap-2 mt-4 md:mt-0">
+            <div className="-mx-6 overflow-x-auto px-6 pb-1 md:mx-0 md:overflow-visible md:px-0 md:pb-0">
+              <div className="flex min-w-max items-center gap-2 md:min-w-0">
               <Button
                 variant={isWatched ? "outline" : "default"}
                 size="sm"
                 onClick={handleToggleWatchlist}
                 className={
                   isWatched
-                    ? "border-amber-500 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400"
-                    : "bg-slate-600 hover:bg-slate-500"
+                    ? "shrink-0 border-amber-500 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400"
+                    : "shrink-0 bg-slate-600 hover:bg-slate-500"
                 }
               >
                 <Star
@@ -334,7 +335,7 @@ function StockDetailPageContent() {
                 asChild
                 size="sm"
                 variant="outline"
-                className="border-blue-500/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-blue-100"
+                className="shrink-0 border-blue-500/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-blue-100"
               >
                 <Link href={`/alerts?stock=${encodeURIComponent(stockSymbol)}`}>
                   <Bell className="mr-2 h-4 w-4" />
@@ -345,7 +346,7 @@ function StockDetailPageContent() {
                 asChild
                 size="sm"
                 variant="outline"
-                className="border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 hover:text-emerald-100"
+                className="shrink-0 border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 hover:text-emerald-100"
               >
                 <Link href={`/backtests?stock=${encodeURIComponent(stockSymbol)}`}>
                   <BacktestIcon className="mr-2 h-4 w-4" />
@@ -356,7 +357,7 @@ function StockDetailPageContent() {
                 asChild
                 size="sm"
                 variant="outline"
-                className="border-cyan-500/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20 hover:text-cyan-50"
+                className="shrink-0 border-cyan-500/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20 hover:text-cyan-50"
               >
                 <Link
                   href={`/compare?mode=${isEtf ? "etf" : "peers"}&symbol=${encodeURIComponent(
@@ -370,7 +371,7 @@ function StockDetailPageContent() {
               <Button
                 size="sm"
                 onClick={() => handleOpenTradeDialog("BUY")}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="shrink-0 bg-blue-600 hover:bg-blue-700"
               >
                 <ShoppingCart className="mr-2 h-4 w-4" />
                 模擬買入
@@ -378,11 +379,12 @@ function StockDetailPageContent() {
               <Button
                 size="sm"
                 onClick={() => handleOpenTradeDialog("SELL")}
-                className="bg-red-600 hover:bg-red-700"
+                className="shrink-0 bg-red-600 hover:bg-red-700"
               >
                 <DollarSign className="mr-2 h-4 w-4" />
                 模擬賣出
               </Button>
+              </div>
             </div>
           </div>
           <div className="mt-4">

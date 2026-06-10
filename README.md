@@ -4,49 +4,47 @@
 
 ## 功能總覽
 
-<!-- 為讓讀者快速掌握系統價值，建議在以下章節插入對應截圖。請將圖片置於 `frontend/public/screenshots/` 或其他版本控管目錄，並以 Markdown 語法引用，例如 `![儀表板畫面](frontend/public/screenshots/dashboard-overview.png)`。 -->
-
 ### 儀表板總覽
 
 - 登入後即顯示市場概況、投資組合績效、自選股漲跌等資訊，一眼掌握關鍵資料。
 - 以卡片、圖表與表格呈現數據，支援桌機與行動裝置的響應式配置。
-  ![alt text](frontend/public/screenshots/HyBZQTF7xe-1.png)
+  ![儀表板總覽](frontend/public/screenshots/HyBZQTF7xe-1.png)
 
 ### 股票搜尋與詳細資訊
 
 - 透過頂部搜尋列或儀表板捷徑輸入股票代號，即可查看最新匯入報價、歷史走勢與財務指標。
 - 歷史走勢支援線圖與 K 線圖，`MAX` 區間會顯示資料庫中可用的完整歷史資料。
-  ![alt text](frontend/public/screenshots/Bk8V4pKQge.png)
-  ![alt text](frontend/public/screenshots/HJunHTYmxe.png)
+  ![股票搜尋列表](frontend/public/screenshots/Bk8V4pKQge.png)
+  ![股票詳細資訊](frontend/public/screenshots/HJunHTYmxe.png)
 
 - 提供模擬下單操作，協助使用者快速評估交易策略。
-  ![alt text](frontend/public/screenshots/S14XL6KQeg.png)
+  ![模擬下單操作](frontend/public/screenshots/S14XL6KQeg.png)
 
 ### 自選股管理
 
 - 快速新增、移除或批次檢查關注的股票，並同步顯示漲跌幅與重要消息。
 - 搭配 Toast 與通知顯示操作結果，維持流暢互動體驗。
-  ![alt text](frontend/public/screenshots/SJydIptXel.png)
+  ![自選股管理](frontend/public/screenshots/SJydIptXel.png)
 
 ### 投資組合與交易紀錄
 
 - 建立多個投資組合，記錄每筆買賣交易，自動計算損益與持股分布。
 - 透過圖表視覺化投資成果，協助掌握長期績效。
-  ![alt text](frontend/public/screenshots/SJNo8aF7ee.png)
-  ![alt text](frontend/public/screenshots/BJGgwTKXlg.png)
+  ![投資組合列表](frontend/public/screenshots/SJNo8aF7ee.png)
+  ![投資組合詳細資訊](frontend/public/screenshots/BJGgwTKXlg.png)
 
 ### 使用者驗證與帳戶管理
 
-- 支援電子郵件註冊/登入與 Google OAuth，並提供重設密碼等帳戶管理功能。
+- 支援電子郵件註冊/登入與 Google OAuth，登入後可在個人資料頁變更密碼。
 - 所有 API 依 Session 控制權限，確保資料安全。
-![alt text](frontend/public/screenshots/BJB6X6tQxg.png)
+![登入與帳戶管理](frontend/public/screenshots/BJB6X6tQxg.png)
 
-### 管理員市場資料維護
+### 管理員後台
 
+- 管理員可查看使用者清單、搜尋帳號、調整角色，並刪除不再使用的帳號。
 - 管理員可在後台查看 `stocks`、`historicalprices`、`financialreports`、`dividends` 與 `stocksplits` 的資料量與最新日期。
 - 後台同步支援 FinLab 優先與免費來源備援，也可選擇上市上櫃、ETF 或全部可用範圍。
 - 每次同步會保留工作紀錄，並在完成後產生資料品質快照，協助檢查缺價格、價格日期落後、長期標的資料過少與名稱缺漏。
-<!-- > 提示：若需儲存在 Git LFS 或 CDN，可將 Markdown 圖片路徑替換為實際連結，確保 README 顯示正常。 -->
 
 ## 系統架構與技術
 
@@ -105,11 +103,13 @@ Stock-Query-Website/
    DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DATABASE?connection_limit=5"
    FINLAB_API_TOKEN=你的 FinLab VIP / API Token
    FINMIND_API_TOKEN=可選，免費來源若需較高額度可設定
+   CRON_SECRET=請改成隨機長字串
    ```
 
    - 若未啟用 Google OAuth，可先留空 `GOOGLE_CLIENT_*`，但登入功能將僅限 Email/密碼。
    - `DATABASE_URL` 請替換為實際 MySQL 連線字串。
    - `FINLAB_API_TOKEN` 是完整匯入歷史股價與財報的主要資料來源；若缺少 token，管理員同步的 Auto 模式會改用免費來源。
+   - `CRON_SECRET` 用於保護排程 API，建議使用 `openssl rand -hex 24` 產生。
 
 4. **初始化資料庫結構（沒有備份時使用）**
 
@@ -125,17 +125,21 @@ Stock-Query-Website/
 
    若要在另一台電腦重建出和目前開發機接近的資料庫狀態，建議優先使用 MySQL dump 備份還原。備份檔體積較大，不建議放進 Git repo；可放在 Google Drive，讓新環境下載後匯入。
 
-   備份檔命名建議：
+   備份檔：
 
    ```text
    stock_query_website_YYYYMMDD_HHMMSS_portable.sql.gz
    ```
 
-   若已將備份檔放在 Google Drive，請先從瀏覽器下載到新電腦，例如放在 `~/Downloads/stock_query_website_YYYYMMDD_HHMMSS_portable.sql.gz`。也可以使用 `gdown` 下載公開或已授權的 Google Drive 檔案：
+   Google Drive 下載連結：
+
+   [stock_query_website MySQL dump](https://drive.google.com/file/d/1x_nJRVkf0tmbazpmBj7oGg83SAg9q2cj/view?usp=sharing)
+
+   請先從瀏覽器下載到新電腦，例如放在 `~/Downloads/stock_query_website_YYYYMMDD_HHMMSS_portable.sql.gz`。也可以使用 `gdown` 下載公開或已授權的 Google Drive 檔案：
 
    ```bash
    pip install gdown
-   gdown "https://drive.google.com/uc?id=GOOGLE_DRIVE_FILE_ID" \
+   gdown "https://drive.google.com/uc?id=1x_nJRVkf0tmbazpmBj7oGg83SAg9q2cj" \
      -O ~/Downloads/stock_query_website_YYYYMMDD_HHMMSS_portable.sql.gz
    ```
 
@@ -241,7 +245,26 @@ Stock-Query-Website/
 
    完整同步可能需要較久時間，部署環境需具備 `DATABASE_URL`、`uv` 與對應資料來源 token。
 
-8. **啟動開發伺服器**
+8. **自動評估警示通知（選用）**
+
+   專案提供排程專用 API，可在不需要使用者手動按按鈕的情況下，評估所有啟用中的警示規則並寫入站內通知：
+
+   ```text
+   GET 或 POST /api/notifications/evaluate-cron
+   Authorization: Bearer <CRON_SECRET>
+   ```
+
+   本機測試可使用：
+
+   ```bash
+   curl -X POST \
+     -H "Authorization: Bearer $CRON_SECRET" \
+     http://localhost:3000/api/notifications/evaluate-cron
+   ```
+
+   若部署在 Vercel，`frontend/vercel.json` 已設定每天 `08:00 UTC` 執行一次，也就是台灣時間 16:00。請在 Vercel Project Settings 的 Environment Variables 設定同一組 `CRON_SECRET`；Vercel Cron 會在排程呼叫時自動帶入 Bearer token。若使用其他平台，也可以用 GitHub Actions、Linux crontab 或第三方 cron 服務定時呼叫同一個 API。
+
+9. **啟動開發伺服器**
 
    ```bash
    npm run dev
@@ -249,21 +272,12 @@ Stock-Query-Website/
 
    瀏覽器開啟 [http://localhost:3000](http://localhost:3000) 即可開始使用。修改 `app/page.jsx` 或其他檔案會自動觸發 HMR 更新。
 
-9. **建置與部署（選用）**
+10. **建置與部署（選用）**
    ```bash
    npm run build   # 建置生產版
    npm run start   # 啟動生產伺服器（需事先執行 build）
    ```
    專案預設與 Vercel 相容，亦可部署至任何支援 Node.js 的平台。
-
-<!-- ## 介面截圖與文件建議
-
-- 建議建立 `frontend/public/screenshots/` 或 `docs/screenshots/` 目錄集中存放 PNG/JPEG 圖檔。
-- README 中嵌入截圖的 Markdown 範例：
-  ```markdown
-  ![儀表板預覽](frontend/public/screenshots/dashboard-overview.png)
-  ```
-- 若需搭配說明文字，可在「功能總覽」各節加入截圖與重點描述，突顯功能亮點。 -->
 
 ## 常用指令
 
@@ -286,10 +300,4 @@ Stock-Query-Website/
 - **API 權限**：所有 `app/api` Route Handler 都會根據 Session 判斷能否查詢或異動資料；未登入請求將回傳 401。
 - **樂觀更新**：例如自選股的加入/移除操作會先更新 UI，再同步後端，並透過 Toast 呈現成功或錯誤訊息。
 - **效能與型別**：Prisma 查詢時限制欄位與筆數（如儀表板僅取前 5 筆摘要），部分 API（如 `app/api/stocks/route.js`）使用原生 SQL 實作全文搜尋與分頁提升效能。
-- **市場資料不是即時串流**：股價、財報與股利資料先由匯入腳本寫入 MySQL，前端查詢時讀取資料庫；若需要盤中即時行情，需另接 WebSocket 或即時 API。
-
-## 未來可延伸方向
-
-- 串接即時行情 WebSocket 以取代批次更新機制。
-- 於 `transactions` 加入自動匯率換算與投資報告圖表。
-- 建置 CI/CD Flow（ESLint、單元測試、部署前預覽）。
+- **市場資料不是即時串流**：股價、財報與股利資料先由匯入腳本寫入 MySQL，前端查詢時讀取資料庫。

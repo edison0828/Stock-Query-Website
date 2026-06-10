@@ -55,6 +55,17 @@ const MiniTrendChart = ({ data, isUp }) => (
   </ResponsiveContainer>
 );
 
+function getDeterministicJitter(seed, index) {
+  const input = `${seed || "trend"}:${index}`;
+  let hash = 0;
+
+  for (let charIndex = 0; charIndex < input.length; charIndex += 1) {
+    hash = (hash * 31 + input.charCodeAt(charIndex)) % 100000;
+  }
+
+  return hash / 100000;
+}
+
 export default function DashboardPage() {
   // 新增狀態管理
   const [watchlistSummary, setWatchlistSummary] = useState([]);
@@ -106,7 +117,7 @@ export default function DashboardPage() {
         trendData:
           item.trend_data && item.trend_data.length >= 2
             ? item.trend_data
-            : generateTrendData(item.is_up),
+            : generateTrendData(item.is_up, item.symbol),
       }));
 
       setWatchlistSummary(formattedData);
@@ -141,7 +152,7 @@ export default function DashboardPage() {
   };
 
   // 根據漲跌生成趨勢數據
-  const generateTrendData = (isUp) => {
+  const generateTrendData = (isUp, seed) => {
     const baseValue = 15;
     const variation = 5;
     const trend = isUp ? 1 : -1;
@@ -150,7 +161,7 @@ export default function DashboardPage() {
       uv:
         baseValue +
         index * trend * 2 +
-        (Math.random() * variation - variation / 2),
+        (getDeterministicJitter(seed, index) * variation - variation / 2),
     }));
   };
 
@@ -309,13 +320,13 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="grid gap-6 md:gap-8">
+    <div className="grid min-w-0 gap-6 md:gap-8">
       {/* 可以考慮在這裡顯示用戶名等 */}
       {/* <h2 className="text-2xl font-semibold text-slate-100 mb-2">歡迎回來, {session.user.name}!</h2> */}
       {/* Row 1: Watchlist and Portfolio Summary */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid min-w-0 gap-6 md:grid-cols-3">
         {/* Watchlist Overview (Col Span 2) */}
-        <Card className="md:col-span-2 bg-slate-800 border-slate-700 text-slate-200">
+        <Card className="min-w-0 md:col-span-2 bg-slate-800 border-slate-700 text-slate-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xl font-semibold text-slate-100">
               個人關注列表摘要
@@ -346,63 +357,65 @@ export default function DashboardPage() {
                 </Button>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-slate-700 hover:bg-slate-700/30">
-                    <TableHead className="text-slate-400">
-                      TICKER/NAME
-                    </TableHead>
-                    <TableHead className="text-slate-400">PRICE</TableHead>
-                    <TableHead className="text-slate-400">CHANGE</TableHead>
-                    <TableHead className="text-slate-400 w-[100px]">
-                      5-DAY TREND
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {watchlistSummary.map((stock) => (
-                    <TableRow
-                      key={stock.ticker}
-                      className="border-slate-700 hover:bg-slate-700/30"
-                    >
-                      <TableCell>
-                        <Link
-                          href={`/stocks/${stock.ticker}`}
-                          className="hover:underline"
-                        >
-                          <div className="font-medium text-slate-100">
-                            {stock.ticker}
-                          </div>
-                          <div className="text-xs text-slate-400">
-                            {stock.name}
-                          </div>
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-slate-200">
-                        {stock.price}
-                      </TableCell>
-                      <TableCell
-                        className={
-                          stock.isUp ? "text-green-400" : "text-red-400"
-                        }
-                      >
-                        {stock.change}
-                      </TableCell>
-                      <TableCell>
-                        <MiniTrendChart
-                          data={stock.trendData}
-                          isUp={stock.isUp}
-                        />
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table className="min-w-[560px]">
+                  <TableHeader>
+                    <TableRow className="border-slate-700 hover:bg-slate-700/30">
+                      <TableHead className="text-slate-400">
+                        TICKER/NAME
+                      </TableHead>
+                      <TableHead className="text-slate-400">PRICE</TableHead>
+                      <TableHead className="text-slate-400">CHANGE</TableHead>
+                      <TableHead className="text-slate-400 w-[100px]">
+                        5-DAY TREND
+                      </TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {watchlistSummary.map((stock) => (
+                      <TableRow
+                        key={stock.ticker}
+                        className="border-slate-700 hover:bg-slate-700/30"
+                      >
+                        <TableCell>
+                          <Link
+                            href={`/stocks/${stock.ticker}`}
+                            className="hover:underline"
+                          >
+                            <div className="font-medium text-slate-100">
+                              {stock.ticker}
+                            </div>
+                            <div className="text-xs text-slate-400">
+                              {stock.name}
+                            </div>
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-slate-200">
+                          {stock.price}
+                        </TableCell>
+                        <TableCell
+                          className={
+                            stock.isUp ? "text-green-400" : "text-red-400"
+                          }
+                        >
+                          {stock.change}
+                        </TableCell>
+                        <TableCell>
+                          <MiniTrendChart
+                            data={stock.trendData}
+                            isUp={stock.isUp}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
         {/* Portfolio Summary */}
-        <Card className="bg-slate-800 border-slate-700 text-slate-200 flex flex-col">
+        <Card className="min-w-0 bg-slate-800 border-slate-700 text-slate-200 flex flex-col">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xl font-semibold text-slate-100">
               投資組合總覽
@@ -468,9 +481,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Row 2: Market Overview and Recent Transactions */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid min-w-0 gap-6 md:grid-cols-3">
         {/* Market Overview */}
-        <Card className="bg-slate-800 border-slate-700 text-slate-200">
+        <Card className="min-w-0 bg-slate-800 border-slate-700 text-slate-200">
           <CardHeader>
             <CardTitle className="text-xl font-semibold text-slate-100">
               熱門交易股票 Top 5
@@ -492,13 +505,13 @@ export default function DashboardPage() {
               marketOverview.map((stock, index) => (
                 <div
                   key={stock.stock_id}
-                  className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg"
+                  className="flex min-w-0 items-center justify-between gap-3 p-3 bg-slate-700/30 rounded-lg"
                 >
-                  <div className="flex items-center space-x-3">
+                  <div className="flex min-w-0 items-center space-x-3">
                     <div className="flex-shrink-0 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-xs font-bold text-white">
                       {index + 1}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <Link
                         href={`/stocks/${stock.stock_id}`}
                         className="font-medium text-slate-100 hover:text-blue-400 hover:underline"
@@ -510,7 +523,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="shrink-0 text-right">
                     <div className="text-sm font-medium text-slate-100">
                       {stock.currency === "USD" ? "$" : "NT$"}
                       {stock.current_price.toFixed(2)}
@@ -534,7 +547,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Recent Transactions (Col Span 2) */}
-        <Card className="md:col-span-2 bg-slate-800 border-slate-700 text-slate-200">
+        <Card className="min-w-0 md:col-span-2 bg-slate-800 border-slate-700 text-slate-200">
           <CardHeader>
             <CardTitle className="text-xl font-semibold text-slate-100">
               Recent Transactions
@@ -558,45 +571,47 @@ export default function DashboardPage() {
                 </Button>
               </div>
             ) : (
-              <Table>
-                <TableBody>
-                  {recentTransactions.map((tx) => (
-                    <TableRow
-                      key={tx.transaction_id}
-                      className="border-slate-700 hover:bg-slate-700/30"
-                    >
-                      <TableCell>
-                        <Badge
-                          variant={
-                            tx.type === "BUY" ? "default" : "destructive"
-                          }
-                          className={
-                            tx.type === "BUY"
-                              ? "bg-green-600/80 hover:bg-green-600 text-green-50"
-                              : "bg-red-600/80 hover:bg-red-600 text-red-50"
-                          }
-                        >
-                          {tx.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium text-slate-100">
-                        <Link
-                          href={`/stocks/${tx.ticker}`}
-                          className="hover:underline"
-                        >
-                          {tx.ticker}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-slate-300">
-                        {tx.shares} shares
-                      </TableCell>
-                      <TableCell className="text-right text-slate-400">
-                        {tx.date}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <Table className="min-w-[520px]">
+                  <TableBody>
+                    {recentTransactions.map((tx) => (
+                      <TableRow
+                        key={tx.transaction_id}
+                        className="border-slate-700 hover:bg-slate-700/30"
+                      >
+                        <TableCell>
+                          <Badge
+                            variant={
+                              tx.type === "BUY" ? "default" : "destructive"
+                            }
+                            className={
+                              tx.type === "BUY"
+                                ? "bg-green-600/80 hover:bg-green-600 text-green-50"
+                                : "bg-red-600/80 hover:bg-red-600 text-red-50"
+                            }
+                          >
+                            {tx.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium text-slate-100">
+                          <Link
+                            href={`/stocks/${tx.ticker}`}
+                            className="hover:underline"
+                          >
+                            {tx.ticker}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-slate-300">
+                          {tx.shares} shares
+                        </TableCell>
+                        <TableCell className="text-right text-slate-400">
+                          {tx.date}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
           <CardFooter>

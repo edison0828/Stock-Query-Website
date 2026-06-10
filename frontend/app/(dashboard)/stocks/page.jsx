@@ -57,13 +57,6 @@ function normalizeMarketType(value) {
   return validMarketTypeIds.has(value) ? value : "ALL";
 }
 
-const mockSecurityStatuses = [
-  { id: "ALL", name: "全部狀態" },
-  { id: "正常", name: "正常" },
-  // { id: "下市櫃/暫停交易", name: "下市櫃/暫停交易" },
-  // { id: "減資/停止帳簿劃撥", name: "減資/停止帳簿劃撥" },
-];
-
 const ITEMS_PER_PAGE = 10;
 
 export default function StockSearchListPage() {
@@ -75,9 +68,6 @@ export default function StockSearchListPage() {
   const [searchTerm, setSearchTerm] = useState(searchParams.get("q") || "");
   const [selectedMarketType, setSelectedMarketType] = useState(
     normalizeMarketType(searchParams.get("market_type") || "ALL")
-  );
-  const [selectedSecurityStatus, setSelectedSecurityStatus] = useState(
-    searchParams.get("security_status") || "ALL"
   );
   const [currentPage, setCurrentPage] = useState(
     parseInt(searchParams.get("page") || "1", 10)
@@ -91,19 +81,13 @@ export default function StockSearchListPage() {
   const [watchingStocks, setWatchingStocks] = useState(new Set());
   const [watchedStocks, setWatchedStocks] = useState(new Set());
 
-  const [marketTypes, setMarketTypes] = useState(mockMarketTypes);
-  const [securityStatuses, setSecurityStatuses] =
-    useState(mockSecurityStatuses);
-
   const totalPages = Math.ceil(totalStocks / ITEMS_PER_PAGE);
 
-  const buildApiParams = (page, query, marketType, securityStatus) => {
+  const buildApiParams = (page, query, marketType) => {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
     if (marketType && marketType !== "ALL")
       params.set("market_type", marketType);
-    if (securityStatus && securityStatus !== "ALL")
-      params.set("security_status", securityStatus);
     params.set("page", page.toString());
     params.set("limit", ITEMS_PER_PAGE.toString());
     return params;
@@ -134,9 +118,9 @@ export default function StockSearchListPage() {
 
   // 核心的獲取股票數據函數
   const fetchStocksData = useCallback(
-    async (page, query, marketType, securityStatus) => {
+    async (page, query, marketType) => {
       setIsLoading(true);
-      const apiParams = buildApiParams(page, query, marketType, securityStatus);
+      const apiParams = buildApiParams(page, query, marketType);
       const urlParamsForRouter = new URLSearchParams(apiParams);
       urlParamsForRouter.delete("limit");
       if (page === 1) urlParamsForRouter.delete("page");
@@ -249,13 +233,8 @@ export default function StockSearchListPage() {
 
   // 使用 debounce 來處理搜尋框輸入
   const debouncedSearch = useCallback(
-    debounce((currentSearchTerm, currentMarketType, currentSecurityStatus) => {
-      fetchStocksData(
-        1,
-        currentSearchTerm,
-        currentMarketType,
-        currentSecurityStatus
-      );
+    debounce((currentSearchTerm, currentMarketType) => {
+      fetchStocksData(1, currentSearchTerm, currentMarketType);
     }, 500),
     [fetchStocksData]
   );
@@ -264,12 +243,11 @@ export default function StockSearchListPage() {
   useEffect(() => {
     const queryFromUrl = searchParams.get("q") || "";
     if (searchTerm !== queryFromUrl) {
-      debouncedSearch(searchTerm, selectedMarketType, selectedSecurityStatus);
+      debouncedSearch(searchTerm, selectedMarketType);
     }
   }, [
     searchTerm,
     selectedMarketType,
-    selectedSecurityStatus,
     searchParams,
     debouncedSearch,
   ]);
@@ -280,35 +258,23 @@ export default function StockSearchListPage() {
     const marketTypeFromUrl = normalizeMarketType(
       searchParams.get("market_type") || "ALL"
     );
-    const securityStatusFromUrl = searchParams.get("security_status") || "ALL";
     const pageFromUrl = parseInt(searchParams.get("page") || "1", 10);
 
     setSearchTerm(queryFromUrl);
     setSelectedMarketType(marketTypeFromUrl);
-    setSelectedSecurityStatus(securityStatusFromUrl);
 
-    fetchStocksData(
-      pageFromUrl,
-      queryFromUrl,
-      marketTypeFromUrl,
-      securityStatusFromUrl
-    );
+    fetchStocksData(pageFromUrl, queryFromUrl, marketTypeFromUrl);
   }, []);
 
   // Handler for filter button
   const handleApplyFilters = () => {
-    fetchStocksData(1, searchTerm, selectedMarketType, selectedSecurityStatus);
+    fetchStocksData(1, searchTerm, selectedMarketType);
   };
 
   // Handler for page change
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages && newPage !== currentPage) {
-      fetchStocksData(
-        newPage,
-        searchTerm,
-        selectedMarketType,
-        selectedSecurityStatus
-      );
+      fetchStocksData(newPage, searchTerm, selectedMarketType);
     }
   };
 
@@ -373,7 +339,7 @@ export default function StockSearchListPage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-4 md:flex-shrink-0 md:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-4 md:flex-shrink-0 md:w-auto">
             <div className="sm:col-span-1">
               <Label
                 htmlFor="market-type-filter"
@@ -392,43 +358,13 @@ export default function StockSearchListPage() {
                   <SelectValue placeholder="全部市場類型" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  {marketTypes.map((mt) => (
+                  {mockMarketTypes.map((mt) => (
                     <SelectItem
                       key={mt.id}
                       value={mt.id}
                       className="hover:bg-slate-700 focus:bg-slate-700"
                     >
                       {mt.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="sm:col-span-1">
-              <Label
-                htmlFor="security-status-filter"
-                className="text-sm font-medium text-slate-300"
-              >
-                證券狀態
-              </Label>
-              <Select
-                value={selectedSecurityStatus}
-                onValueChange={setSelectedSecurityStatus}
-              >
-                <SelectTrigger
-                  id="security-status-filter"
-                  className="mt-1 bg-slate-700 border-slate-600 text-slate-100"
-                >
-                  <SelectValue placeholder="全部狀態" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-slate-200">
-                  {securityStatuses.map((ss) => (
-                    <SelectItem
-                      key={ss.id}
-                      value={ss.id}
-                      className="hover:bg-slate-700 focus:bg-slate-700"
-                    >
-                      {ss.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -471,7 +407,6 @@ export default function StockSearchListPage() {
                       <TableHead className="text-slate-400">股票代號</TableHead>
                       <TableHead className="text-slate-400">公司名稱</TableHead>
                       <TableHead className="text-slate-400">市場類型</TableHead>
-                      <TableHead className="text-slate-400">證券狀態</TableHead>
                       <TableHead className="text-slate-400 text-right">
                         當前股價
                       </TableHead>
@@ -505,9 +440,6 @@ export default function StockSearchListPage() {
                           </TableCell>
                           <TableCell className="text-slate-300">
                             {formatMarketType(stock)}
-                          </TableCell>
-                          <TableCell className="text-slate-300">
-                            {stock.security_status}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex flex-col items-end space-y-1">
