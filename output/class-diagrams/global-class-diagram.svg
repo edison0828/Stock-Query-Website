@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2560" height="1440" viewBox="0 0 2560 1440">
+  <defs>
+    <style>
+      .bg{fill:#fbf7ed}.title{font:800 58px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#17202a}.subtitle{font:600 28px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#53606d}
+      .domain{stroke-width:2.5;rx:24}.d1{fill:#eef8f1;stroke:#afd9b7}.d2{fill:#f3f7ff;stroke:#bed0ef}.d3{fill:#fbf2ff;stroke:#dcc2ef}
+      .domain-title{font:800 32px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#16263c}.domain-note{font:600 21px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#657281}
+      .box{fill:#fffdf7;stroke:#14294a;stroke-width:3;rx:9;filter:url(#shadow)}.head{fill:#f8fbff;stroke:#14294a;stroke-width:3}.sep{stroke:#d8d0c4;stroke-width:1.8}
+      .blue{fill:#1667e8}.green{fill:#0f8a4b}.red{fill:#c92a22}.orange{fill:#d48100}.purple{fill:#6b21a8}
+      .name{font:800 30px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#132b4f}.smallname{font:800 25px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#132b4f}
+      .stereo{font:800 19px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#6b2f8a}.m{font:650 21px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#1d3457}.sm{font:650 19px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#1d3457}
+      .rel{fill:none;stroke:#14294a;stroke-width:3.5}.dash{fill:none;stroke:#14294a;stroke-width:3.2;stroke-dasharray:12 10}.label{font:800 23px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#1b3152}.mult{font:800 23px Arial,"PingFang TC","Microsoft JhengHei",sans-serif;fill:#1b3152}
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#1f2937" flood-opacity=".13"/></filter>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto"><path d="M2,2 L12,7 L2,12 Z" fill="#14294a"/></marker>
+    <marker id="hollow" markerWidth="16" markerHeight="16" refX="14" refY="8" orient="auto"><path d="M2,2 L14,8 L2,14 Z" fill="#fbf7ed" stroke="#14294a" stroke-width="2.3"/></marker>
+    <marker id="diamond" markerWidth="16" markerHeight="16" refX="3" refY="8" orient="auto"><path d="M3,8 L8,3 L13,8 L8,13 Z" fill="#14294a"/></marker>
+  </defs>
+
+  <rect class="bg" width="2560" height="1440"/>
+  <circle cx="-40" cy="1370" r="340" fill="#fff2d4" opacity=".7"/>
+  <path d="M2090 0h470v420q-180 20-300-65t-170-355z" fill="#d8f3e8" opacity=".9"/>
+
+  <rect x="60" y="70" width="760" height="1310" class="domain d1"/>
+  <rect x="880" y="70" width="760" height="1310" class="domain d2"/>
+  <rect x="1700" y="70" width="800" height="1310" class="domain d3"/>
+  <text x="95" y="118" class="domain-title">投資組合領域</text>
+  <text x="95" y="152" class="domain-note">Portfolio 聚合交易、建立持股並計算估值</text>
+  <text x="915" y="118" class="domain-title">警示與通知領域</text>
+  <text x="915" y="152" class="domain-note">AlertRule 階層負責可擴充條件判斷</text>
+  <text x="1735" y="118" class="domain-title">策略回測領域</text>
+  <text x="1735" y="152" class="domain-note">BacktestEngine 執行策略並產生交易與績效</text>
+
+  <!-- Portfolio domain -->
+  <g transform="translate(300 280)">
+    <rect class="box" width="300" height="158"/><rect class="green" width="300" height="10" rx="8"/><rect class="head" y="10" width="300" height="54"/>
+    <text x="150" y="47" text-anchor="middle" class="name">User</text><line class="sep" x1="0" y1="112" x2="300" y2="112"/>
+    <text x="24" y="90" class="m">- userId, username, email</text><text x="24" y="140" class="m">+ updateProfile(): void</text>
+  </g>
+  <g transform="translate(250 690)">
+    <rect class="box" width="400" height="232"/><rect class="blue" width="400" height="10" rx="8"/><rect class="head" y="10" width="400" height="56"/>
+    <text x="200" y="48" text-anchor="middle" class="name">Portfolio</text><line class="sep" x1="0" y1="142" x2="400" y2="142"/>
+    <text x="24" y="94" class="m">- portfolioId: String</text><text x="24" y="119" class="m">- transactions: PortfolioTransaction[]</text><text x="24" y="144" class="m">- positions: Position[]</text>
+    <text x="24" y="176" class="m">+ addTransaction(tx): void</text><text x="24" y="202" class="m">+ buildPositions(): void</text><text x="24" y="226" class="m">+ getSummary(): PortfolioSummary</text>
+  </g>
+  <g transform="translate(95 470)">
+    <rect class="box" width="285" height="168"/><rect class="blue" width="285" height="10" rx="8"/><rect class="head" y="10" width="285" height="56"/>
+    <text x="142.5" y="47" text-anchor="middle" class="smallname">PortfolioPriceService</text><line class="sep" x1="0" y1="104" x2="285" y2="104"/>
+    <text x="22" y="91" class="sm">+ getLatestPrices(ids)</text><text x="22" y="132" class="sm">+ evaluatePortfolio(p)</text><text x="22" y="156" class="sm">  : PortfolioSummary</text>
+  </g>
+  <g transform="translate(520 470)">
+    <rect class="box" width="300" height="180"/><rect class="green" width="300" height="10" rx="8"/><rect class="head" y="10" width="300" height="56"/>
+    <text x="150" y="47" text-anchor="middle" class="smallname">TransactionValidator</text><line class="sep" x1="0" y1="102" x2="300" y2="102"/>
+    <text x="20" y="90" class="sm">+ normalizeInput(input)</text><text x="20" y="130" class="sm">+ createPendingTx(input)</text><text x="20" y="156" class="sm">+ assertCanRecord(p, tx)</text>
+  </g>
+  <g transform="translate(105 1040)">
+    <rect class="box" width="345" height="225"/><rect class="red" width="345" height="10" rx="8"/><rect class="head" y="10" width="345" height="56"/>
+    <text x="172.5" y="47" text-anchor="middle" class="smallname">PortfolioTransaction</text><line class="sep" x1="0" y1="142" x2="345" y2="142"/>
+    <text x="24" y="94" class="m">- transactionId: String</text><text x="24" y="119" class="m">- type: String</text><text x="24" y="144" class="m">- quantity, price, commission</text>
+    <text x="24" y="180" class="m">+ getGrossAmount(): double</text><text x="24" y="207" class="m">+ getNetAmount(): double</text>
+  </g>
+  <g transform="translate(490 1040)">
+    <rect class="box" width="300" height="225"/><rect class="orange" width="300" height="10" rx="8"/><rect class="head" y="10" width="300" height="56"/>
+    <text x="150" y="47" text-anchor="middle" class="name">Position</text><line class="sep" x1="0" y1="142" x2="300" y2="142"/>
+    <text x="24" y="94" class="m">- stockId: String</text><text x="24" y="119" class="m">- quantity: int</text><text x="24" y="144" class="m">- averageCost, realizedPnl</text>
+    <text x="24" y="180" class="m">+ marketValue(price)</text><text x="24" y="207" class="m">+ unrealizedPnl(price)</text>
+  </g>
+
+  <!-- Alert domain -->
+  <g transform="translate(1020 325)">
+    <rect class="box" width="460" height="235"/><rect class="red" width="460" height="10" rx="8"/><rect class="head" y="10" width="460" height="70"/>
+    <text x="230" y="40" text-anchor="middle" class="stereo">&lt;&lt;abstract&gt;&gt;</text><text x="230" y="70" text-anchor="middle" class="name">AlertRule</text><line class="sep" x1="0" y1="148" x2="460" y2="148"/>
+    <text x="26" y="112" class="m">- ruleId: String</text><text x="26" y="139" class="m">- thresholdValue: double</text>
+    <text x="26" y="183" class="m">+ isTriggered(snapshot): boolean</text><text x="26" y="211" class="m">+ getConditionLabel(): String</text>
+  </g>
+  <g transform="translate(940 680)">
+    <rect class="box" width="220" height="95"/><rect class="blue" width="220" height="9" rx="7"/><rect class="head" y="9" width="220" height="48"/><text x="110" y="42" text-anchor="middle" class="smallname">PriceAboveRule</text><text x="22" y="80" class="sm">+ isTriggered()</text>
+  </g>
+  <g transform="translate(1195 680)">
+    <rect class="box" width="220" height="95"/><rect class="blue" width="220" height="9" rx="7"/><rect class="head" y="9" width="220" height="48"/><text x="110" y="42" text-anchor="middle" class="smallname">PriceBelowRule</text><text x="22" y="80" class="sm">+ isTriggered()</text>
+  </g>
+  <g transform="translate(1430 680)">
+    <rect class="box" width="195" height="95"/><rect class="blue" width="195" height="9" rx="7"/><rect class="head" y="9" width="195" height="48"/><text x="97.5" y="42" text-anchor="middle" class="smallname">PercentRule</text><text x="22" y="80" class="sm">+ isTriggered()</text>
+  </g>
+  <g transform="translate(930 970)">
+    <rect class="box" width="330" height="165"/><rect class="blue" width="330" height="10" rx="8"/><rect class="head" y="10" width="330" height="56"/>
+    <text x="165" y="48" text-anchor="middle" class="name">AlertEvaluator</text><line class="sep" x1="0" y1="104" x2="330" y2="104"/>
+    <text x="24" y="92" class="m">+ evaluate(rules, snapshot)</text><text x="24" y="136" class="m">  : AlertRule[]</text>
+  </g>
+  <g transform="translate(1310 970)">
+    <rect class="box" width="285" height="165"/><rect class="green" width="285" height="10" rx="8"/><rect class="head" y="10" width="285" height="56"/>
+    <text x="142.5" y="48" text-anchor="middle" class="smallname">MarketSnapshot</text><line class="sep" x1="0" y1="104" x2="285" y2="104"/>
+    <text x="22" y="92" class="sm">- currentPrice: double</text><text x="22" y="119" class="sm">- percentChange: double</text><text x="22" y="148" class="sm">+ getPercentChange()</text>
+  </g>
+  <g transform="translate(1010 1215)">
+    <rect class="box" width="310" height="105"/><rect class="purple" width="310" height="10" rx="8"/><rect class="head" y="10" width="310" height="54"/>
+    <text x="155" y="47" text-anchor="middle" class="smallname">NotificationService</text><text x="24" y="88" class="sm">+ persistTriggeredAlerts()</text>
+  </g>
+
+  <!-- Backtest domain -->
+  <g transform="translate(1970 315)">
+    <rect class="box" width="400" height="190"/><rect class="purple" width="400" height="10" rx="8"/><rect class="head" y="10" width="400" height="56"/>
+    <text x="200" y="48" text-anchor="middle" class="name">BacktestEngine</text><line class="sep" x1="0" y1="124" x2="400" y2="124"/>
+    <text x="24" y="94" class="m">+ run(strategy, series, capital)</text><text x="24" y="120" class="m">- simulateTrades()</text><text x="24" y="158" class="m">- buildEquityCurve()</text>
+  </g>
+  <g transform="translate(1760 650)">
+    <rect class="box" width="420" height="180"/><rect class="blue" width="420" height="10" rx="8"/><rect class="head" y="10" width="420" height="56"/>
+    <text x="210" y="48" text-anchor="middle" class="smallname">MovingAverageCrossStrategy</text><line class="sep" x1="0" y1="118" x2="420" y2="118"/>
+    <text x="24" y="94" class="m">- shortWindow: int</text><text x="24" y="120" class="m">- longWindow: int</text><text x="24" y="154" class="m">+ generateSignals(series): Signal[]</text>
+  </g>
+  <g transform="translate(2220 650)">
+    <rect class="box" width="240" height="190"/><rect class="purple" width="240" height="10" rx="8"/><rect class="head" y="10" width="240" height="56"/>
+    <text x="120" y="48" text-anchor="middle" class="smallname">BacktestTrade</text><line class="sep" x1="0" y1="132" x2="240" y2="132"/>
+    <text x="22" y="94" class="sm">- stockId: String</text><text x="22" y="119" class="sm">- tradeDate: Date</text><text x="22" y="145" class="sm">- price, quantity</text><text x="22" y="172" class="sm">+ toPersistence()</text>
+  </g>
+  <g transform="translate(1760 1015)">
+    <rect class="box" width="240" height="120"/><rect class="orange" width="240" height="10" rx="8"/><rect class="head" y="10" width="240" height="56"/>
+    <text x="120" y="48" text-anchor="middle" class="smallname">PriceSeries</text><text x="40" y="92" class="m">歷史股價資料</text>
+  </g>
+  <g transform="translate(2050 1010)">
+    <rect class="box" width="380" height="220"/><rect class="green" width="380" height="10" rx="8"/><rect class="head" y="10" width="380" height="56"/>
+    <text x="190" y="48" text-anchor="middle" class="name">PerformanceReport</text><line class="sep" x1="0" y1="144" x2="380" y2="144"/>
+    <text x="24" y="94" class="m">- totalReturnPercent: double</text><text x="24" y="120" class="m">- maxDrawdownPercent: double</text><text x="24" y="146" class="m">- winRatePercent: double</text><text x="24" y="184" class="m">+ fromBacktest(trades, curve)</text>
+  </g>
+
+  <!-- Relationships -->
+  <path class="rel" d="M450 438 L450 690" marker-end="url(#arrow)"/><text x="365" y="625" class="label">owns</text><text x="421" y="510" class="mult">1</text><text x="410" y="680" class="mult">0..*</text>
+  <path class="rel" d="M330 1040 C345 950 385 900 430 922" marker-start="url(#diamond)"/><text x="145" y="990" class="label">records</text><text x="350" y="1024" class="mult">0..*</text>
+  <path class="rel" d="M612 1040 L548 922" marker-end="url(#arrow)"/><text x="642" y="985" class="label">builds</text><text x="576" y="1010" class="mult">0..*</text>
+  <path class="dash" d="M380 555 C440 545 490 565 525 580" marker-end="url(#arrow)"/><text x="118" y="448" class="label">evaluates prices</text>
+  <path class="dash" d="M635 650 L585 690" marker-end="url(#arrow)"/><text x="595" y="682" class="label">validates</text>
+
+  <path class="rel" d="M1250 560 L1050 680" marker-end="url(#hollow)"/><path class="rel" d="M1250 560 L1305 680" marker-end="url(#hollow)"/><path class="rel" d="M1250 560 L1510 680" marker-end="url(#hollow)"/>
+  <path class="dash" d="M1095 970 C1115 875 1165 770 1220 560" marker-end="url(#hollow)"/><text x="990" y="910" class="label">evaluates</text>
+  <path class="dash" d="M1260 1050 L1310 1050" marker-end="url(#arrow)"/><text x="1210" y="1092" class="label">reads</text>
+  <path class="dash" d="M1165 1135 L1165 1215" marker-end="url(#arrow)"/><text x="1185" y="1195" class="label">triggers</text>
+
+  <path class="dash" d="M1970 385 C1870 450 1835 545 1940 650" marker-end="url(#arrow)"/><text x="1795" y="525" class="label">executes</text>
+  <path class="dash" d="M2370 505 L2328 650" marker-end="url(#arrow)"/><text x="2368" y="596" class="label">produces</text>
+  <path class="dash" d="M2170 505 L2240 1010" marker-end="url(#arrow)"/><text x="2248" y="960" class="label">builds</text>
+  <path class="dash" d="M1945 830 L1880 1015" marker-end="url(#arrow)"/><text x="1865" y="935" class="label">uses</text>
+
+  <!-- Cross-domain links -->
+  <path class="dash" d="M650 765 C760 705 815 695 940 710" marker-end="url(#arrow)"/><text x="655" y="735" class="label">portfolio threshold rules</text>
+  <path class="dash" d="M1455 970 C1600 820 1690 700 1760 690" marker-end="url(#arrow)"/><text x="1460" y="850" class="label">market snapshot / price series</text>
+  <path class="dash" d="M1595 1065 C1660 1065 1710 1065 1760 1065" marker-end="url(#arrow)"/><text x="1515" y="1180" class="label">shared market data</text>
+
+</svg>

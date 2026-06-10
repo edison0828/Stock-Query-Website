@@ -28,6 +28,7 @@ import {
   LineChart,
   LogOut, // Logout Icon
   User, // Profile Icon
+  Users,
   Loader2 as Spinner, // Loading Spinner
 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react"; // 引入 signOut
@@ -252,14 +253,24 @@ export default function Navbar({ user }) {
                 Backtests
               </Link>
               {isAdmin && (
-                <Link
-                  href="/admin/market-data"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-4 px-2.5 hover:text-slate-50"
-                >
-                  <DatabaseZap className="h-4 w-4" />
-                  Market Data Admin
-                </Link>
+                <>
+                  <Link
+                    href="/admin/users"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-4 px-2.5 hover:text-slate-50"
+                  >
+                    <Users className="h-4 w-4" />
+                    User Account Admin
+                  </Link>
+                  <Link
+                    href="/admin/market-data"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-4 px-2.5 hover:text-slate-50"
+                  >
+                    <DatabaseZap className="h-4 w-4" />
+                    Market Data Admin
+                  </Link>
+                </>
               )}
               <Link
                 href="/profile"
@@ -366,15 +377,26 @@ export default function Navbar({ user }) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-slate-700" />
             {isAdmin && (
-              <DropdownMenuItem
-                asChild
-                className="hover:bg-slate-700/80 cursor-pointer"
-              >
-                <Link href="/admin/market-data" className="flex items-center">
-                  <DatabaseZap className="mr-2 h-4 w-4" />
-                  <span>市場資料維護</span>
-                </Link>
-              </DropdownMenuItem>
+              <>
+                <DropdownMenuItem
+                  asChild
+                  className="hover:bg-slate-700/80 cursor-pointer"
+                >
+                  <Link href="/admin/users" className="flex items-center">
+                    <Users className="mr-2 h-4 w-4" />
+                    <span>帳號管理</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  asChild
+                  className="hover:bg-slate-700/80 cursor-pointer"
+                >
+                  <Link href="/admin/market-data" className="flex items-center">
+                    <DatabaseZap className="mr-2 h-4 w-4" />
+                    <span>市場資料維護</span>
+                  </Link>
+                </DropdownMenuItem>
+              </>
             )}
             <DropdownMenuItem
               asChild
